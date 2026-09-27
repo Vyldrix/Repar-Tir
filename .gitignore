@@ -4,7 +4,7 @@ node_modules/
 # Compilación TypeScript
 dist/
 
-# Variables de entorno
+# Variables de entorno.
 .env
 .env.local
 .env.*.local
