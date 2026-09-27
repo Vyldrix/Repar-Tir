@@ -17,7 +17,7 @@ yarn-error.log*
 # Cobertura de pruebas
 coverage/
 
-# IDEs y SO
+# IDEs y SO.
 .vscode/
 .idea/
 .DS_Store
