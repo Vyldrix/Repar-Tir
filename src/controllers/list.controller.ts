@@ -33,7 +33,8 @@ export class ListController {
   }
 
   static async update(req: Request, res: Response): Promise<void> {
-    const { id } = req.params;
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     const { title } = req.body;
 
     // 1. Validar que la lista exista
@@ -72,7 +73,8 @@ export class ListController {
   }
 
   static async delete(req: Request, res: Response): Promise<void> {
-    const { id } = req.params;
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
     // 1. Validar si la lista existe
     const list = await ListModel.findById(id);

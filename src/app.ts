@@ -10,9 +10,6 @@ const app: Express = express();
 app.use(cors());
 app.use(express.json());
 
-// Límite de peticiones por IP (Rate Limiting)
-app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
-
 // Cabeceras de seguridad (HSTS / HTTPS y protección)
 app.use((_req, res, next) => {
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -20,6 +17,9 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   next();
 });
+
+// Límite de peticiones por IP (Rate Limiting)
+app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
 
 // Rutas
 app.use('/api/auth', authRouter);

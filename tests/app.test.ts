@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
+import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+
+beforeEach(() => {
+  clearRateLimits();
+});
 
 describe('GET /api/health', () => {
   it('debe responder con estado 200 y el mensaje de confirmación', async () => {
