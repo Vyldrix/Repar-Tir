@@ -14,7 +14,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Cobertura de pruebas
+# Cobertura de pruebas.
 coverage/
 
 # IDEs y SO.
