@@ -76,7 +76,7 @@ export class UserModel {
     };
   }
 
-  static toResponse(user: User): UserResponseDto {
+  static toResponse(user: User): UserResponse {
     const { passwordHash: _passwordHash, ...userResponse } = user;
     return userResponse;
   }
