@@ -1,7 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import prisma from '../src/lib/prisma.js';
+
+beforeAll(async () => {
+  await prisma.list.deleteMany();
+  await prisma.user.deleteMany();
+});
+
+afterAll(async () => {
+  await prisma.list.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.$disconnect();
+});
 
 beforeEach(() => {
   clearRateLimits();

@@ -6,6 +6,10 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "build": "prisma generate && tsc",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -20,6 +24,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"
@@ -31,6 +36,7 @@
     "@types/node": "^22.20.3",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.0.2",
+    "prisma": "^6.19.3",
     "eslint": "^10.11.0",
     "supertest": "^7.2.2",
     "tsx": "^4.23.13",
