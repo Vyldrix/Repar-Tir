@@ -1,0 +1,60 @@
+name: CI - Integración Continua
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  validate-and-test:
+    name: Lint, Test y Build (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 🔍 Verificación de tipos TypeScript (Typecheck)
+        run: npm run typecheck
+
+      - name: 🧹 Análisis estático y calidad de código (ESLint)
+        run: npm run lint
+
+      - name: 🧪 Ejecución de pruebas unitarias e integración con cobertura
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+          PORT: 3000
+
+      - name: 🏗️ Compilación y empaquetado (Build)
+        run: npm run build
+
+      - name: 📋 Publicar resumen del Pipeline en el Job Summary
+        if: always()
+        run: |
+          echo "### 🚀 Resumen de CI - Repar-Tir Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Estado del Job:** ${{ job.status == 'success' && '✅ Exitoso' || '❌ Fallido' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Versión de Node:** ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Evento disparador:** \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Rama / Ref:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

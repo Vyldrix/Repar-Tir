@@ -40,7 +40,7 @@ export class UserModel {
   }
 
   static toResponse(user: User): UserResponse {
-    const { passwordHash, ...userResponse } = user;
+    const { passwordHash: _passwordHash, ...userResponse } = user;
     return userResponse;
   }
 
