@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import { requireAuth, signJWT } from '../src/middlewares/auth.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -640,5 +641,112 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
     const duration = performance.now() - start;
 
     expect(duration).toBeLessThan(200);
+  });
+});
+
+// Middleware requireAuth para validación de token JWT en rutas protegidas (HU14).
+describe('Middleware requireAuth y protección de rutas con JWT (HU14)', () => {
+  const userHU14 = {
+    username: 'userHU14Middleware',
+    email: 'hu14.middleware@example.com',
+    password: 'PasswordSeguroHU14!',
+  };
+
+  let validToken: string;
+  let userId: string;
+
+  beforeAll(async () => {
+    const regRes = await request(app).post('/api/auth/register').send(userHU14);
+    userId = regRes.body.id;
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: userHU14.email, password: userHU14.password });
+
+    validToken = loginRes.body.token;
+  });
+
+  it('debe interceptar la petición y permitir acceso cuando se provee un Bearer Token válido', async () => {
+    const response = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${validToken}`)
+      .send({ title: 'Lista autorizada con requireAuth' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toHaveProperty('id');
+    expect(response.body.userId).toBe(userId);
+  });
+
+  it('debe retornar 401 Unauthorized si el token no está presente en el encabezado', async () => {
+    // Sin encabezado Authorization
+    const resSinHeader = await request(app)
+      .post('/api/lists')
+      .send({ title: 'Lista sin header' });
+
+    expect(resSinHeader.status).toBe(401);
+    expect(resSinHeader.body).toHaveProperty('message');
+
+    // Con encabezado pero sin Bearer
+    const resSinBearer = await request(app)
+      .post('/api/lists')
+      .set('Authorization', 'Basic 12345')
+      .send({ title: 'Lista basic auth' });
+
+    expect(resSinBearer.status).toBe(401);
+
+    // Con Bearer pero vacío
+    const resBearerVacio = await request(app)
+      .post('/api/lists')
+      .set('Authorization', 'Bearer ')
+      .send({ title: 'Lista bearer vacio' });
+
+    expect(resBearerVacio.status).toBe(401);
+  });
+
+  it('debe retornar 401 Unauthorized si la firma del token es inválida o ha sido alterada', async () => {
+    const alteredToken = validToken.slice(0, -6) + 'abcdef';
+
+    const response = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${alteredToken}`)
+      .send({ title: 'Lista con token alterado' });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toHaveProperty('message');
+  });
+
+  it('debe retornar 401 Unauthorized si el token JWT ha expirado', async () => {
+    // Generar token con expiración negativa (-60 segundos)
+    const expiredToken = signJWT({ userId, username: userHU14.username }, -60);
+
+    const response = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${expiredToken}`)
+      .send({ title: 'Lista con token expirado' });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toHaveProperty('message');
+  });
+
+  it('debe inyectar la información decodificada del usuario en el objeto request (req.user)', async () => {
+    const mockReq = {
+      headers: {
+        authorization: `Bearer ${validToken}`,
+      },
+    } as any;
+    let nextCalled = false;
+    const mockRes = {
+      status: () => mockRes,
+      json: () => mockRes,
+    } as any;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    await requireAuth(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(true);
+    expect(mockReq.user).toBeDefined();
+    expect(mockReq.user.id).toBe(userId);
   });
 });
