@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import { requireAuth, requireRole, signJWT } from '../src/middlewares/auth.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -640,5 +641,157 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
     const duration = performance.now() - start;
 
     expect(duration).toBeLessThan(200);
+  });
+});
+
+// Middleware factoría requireRole para control de acceso basado en roles (HU15).
+describe('Middleware factoría requireRole y control de acceso (HU15)', () => {
+  it('debe aceptar un arreglo de roles permitidos y retornar una función middleware de orden superior', () => {
+    const middleware = requireRole(['admin', 'editor']);
+    expect(typeof middleware).toBe('function');
+    expect(middleware.length).toBe(3); // (req, res, next)
+  });
+
+  it('debe retornar 401 Unauthorized si el usuario no ha sido autenticado previamente con requireAuth', () => {
+    const middleware = requireRole(['admin']);
+    const mockReq = {} as any; // sin req.user
+    let statusSent = 0;
+    let jsonSent: any = null;
+    const mockRes = {
+      status: (code: number) => {
+        statusSent = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        jsonSent = data;
+        return mockRes;
+      },
+    } as any;
+    let nextCalled = false;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    middleware(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(false);
+    expect(statusSent).toBe(401);
+    expect(jsonSent).toHaveProperty('message');
+  });
+
+  it('debe retornar 403 Forbidden si el usuario autenticado no posee un rol válido asignado', () => {
+    const middleware = requireRole(['admin']);
+    const mockReq = {
+      user: { id: 'user-sin-rol-id' }, // autenticado pero sin rol
+    } as any;
+    let statusSent = 0;
+    let jsonSent: any = null;
+    const mockRes = {
+      status: (code: number) => {
+        statusSent = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        jsonSent = data;
+        return mockRes;
+      },
+    } as any;
+    let nextCalled = false;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    middleware(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(false);
+    expect(statusSent).toBe(403);
+    expect(jsonSent).toHaveProperty('message');
+  });
+
+  it('debe retornar 403 Forbidden si el rol del usuario no se encuentra dentro del arreglo autorizado', () => {
+    const middleware = requireRole(['admin', 'superadmin']);
+    const mockReq = {
+      user: { id: 'user-normal-id', role: 'user' },
+    } as any;
+    let statusSent = 0;
+    let jsonSent: any = null;
+    const mockRes = {
+      status: (code: number) => {
+        statusSent = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        jsonSent = data;
+        return mockRes;
+      },
+    } as any;
+    let nextCalled = false;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    middleware(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(false);
+    expect(statusSent).toBe(403);
+    expect(jsonSent).toHaveProperty('message');
+  });
+
+  it('debe permitir el flujo (next()) si el rol del usuario está incluido en el arreglo autorizado', () => {
+    const middleware = requireRole(['admin', 'moderator']);
+    const mockReq = {
+      user: { id: 'admin-user-id', role: 'admin' },
+    } as any;
+    let nextCalled = false;
+    const mockRes = {} as any;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    middleware(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(true);
+  });
+
+  it('debe permitir el flujo si el usuario posee un arreglo de roles y al menos uno coincide', () => {
+    const middleware = requireRole(['admin']);
+    const mockReq = {
+      user: { id: 'multi-role-user-id', roles: ['user', 'admin'] },
+    } as any;
+    let nextCalled = false;
+    const mockRes = {} as any;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    middleware(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(true);
+  });
+
+  it('debe funcionar en conjunto con requireAuth en peticiones HTTP completas', async () => {
+    // Montar ruta de prueba protegida por requireAuth y requireRole(['admin'])
+    app.get('/api/test-role-endpoint', requireAuth, requireRole(['admin']), (_req, res) => {
+      res.status(200).json({ status: 'success', data: 'Zona restringida para admin' });
+    });
+
+    // 1. Petición sin token -> 401
+    const resSinToken = await request(app).get('/api/test-role-endpoint');
+    expect(resSinToken.status).toBe(401);
+
+    // 2. Petición con token con rol 'user' -> 403
+    const userToken = signJWT({ userId: 'user-normal', role: 'user' });
+    const resUser = await request(app)
+      .get('/api/test-role-endpoint')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(resUser.status).toBe(403);
+
+    // 3. Petición con token con rol 'admin' -> 200
+    const adminToken = signJWT({ userId: 'admin-user', role: 'admin' });
+    const resAdmin = await request(app)
+      .get('/api/test-role-endpoint')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(resAdmin.status).toBe(200);
+    expect(resAdmin.body).toHaveProperty('data', 'Zona restringida para admin');
   });
 });
