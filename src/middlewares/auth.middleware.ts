@@ -44,6 +44,113 @@ export function verifyJWT(token: string): { valid: boolean; payload?: any; error
   }
 }
 
+/**
+ * =========================================================================
+ * Almacenamiento y gestión de Refresh Tokens (HU #13):
+ * Permite validar estado (activo / revocado) y expiración de los refresh tokens.
+ * =========================================================================
+ */
+export interface RefreshTokenRecord {
+  token: string;
+  userId: string;
+  status: 'active' | 'revoked';
+  expiresAt: number;
+}
+
+export class RefreshTokenStore {
+  private static store = new Map<string, RefreshTokenRecord>();
+
+  static save(token: string, record: { userId: string; expiresAt: number; status?: 'active' | 'revoked' }): void {
+    this.store.set(token, {
+      token,
+      userId: record.userId,
+      status: record.status || 'active',
+      expiresAt: record.expiresAt,
+    });
+  }
+
+  static get(token: string): RefreshTokenRecord | undefined {
+    return this.store.get(token);
+  }
+
+  static revoke(token: string): boolean {
+    const record = this.store.get(token);
+    if (record) {
+      record.status = 'revoked';
+      return true;
+    }
+    return false;
+  }
+
+  static isRevoked(token: string): boolean {
+    const record = this.store.get(token);
+    return record?.status === 'revoked';
+  }
+
+  static clear(): void {
+    this.store.clear();
+  }
+}
+
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || JWT_SECRET;
+const REFRESH_TOKEN_EXPIRES_IN = Number(process.env.REFRESH_TOKEN_EXPIRES_IN) || 7 * 24 * 3600; // 7 días
+
+export function signRefreshToken(payload: object, expiresInSeconds = REFRESH_TOKEN_EXPIRES_IN): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + expiresInSeconds;
+  const fullPayload = { ...payload, iat: now, exp, tokenType: 'refresh' };
+  const payloadEncoded = Buffer.from(JSON.stringify(fullPayload)).toString('base64url');
+  const signature = crypto
+    .createHmac('sha256', REFRESH_TOKEN_SECRET)
+    .update(`${header}.${payloadEncoded}`)
+    .digest('base64url');
+  const token = `${header}.${payloadEncoded}.${signature}`;
+
+  const userId = (payload as Record<string, unknown>).userId || (payload as Record<string, unknown>).id || '';
+  RefreshTokenStore.save(token, {
+    userId: String(userId),
+    expiresAt: exp * 1000,
+    status: 'active',
+  });
+
+  return token;
+}
+
+export function verifyRefreshToken(token: string): { valid: boolean; payload?: any; error?: string; status?: number } {
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return { valid: false, error: 'Token malformado', status: 401 };
+  }
+
+  const [headerEncoded, payloadEncoded, signature] = parts;
+  const expectedSignature = crypto
+    .createHmac('sha256', REFRESH_TOKEN_SECRET)
+    .update(`${headerEncoded}.${payloadEncoded}`)
+    .digest('base64url');
+
+  if (signature !== expectedSignature) {
+    return { valid: false, error: 'Firma de refresh token inválida o alterada', status: 401 };
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(payloadEncoded, 'base64url').toString('utf-8'));
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      return { valid: false, error: 'Refresh token expirado', status: 401 };
+    }
+
+    const record = RefreshTokenStore.get(token);
+    if (record && record.status === 'revoked') {
+      return { valid: false, error: 'Refresh token revocado', status: 403 };
+    }
+
+    return { valid: true, payload };
+  } catch {
+    return { valid: false, error: 'Payload de refresh token inválido', status: 401 };
+  }
+}
+
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
 
@@ -66,7 +173,11 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
       res.status(401).json({ message: `No autorizado: ${verification.error}` });
       return;
     }
-    (req as any).user = { id: verification.payload.userId };
+    (req as any).user = {
+      id: verification.payload.userId || verification.payload.id,
+      username: verification.payload.username,
+      email: verification.payload.email,
+    };
     next();
     return;
   }

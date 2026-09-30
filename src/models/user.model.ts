@@ -53,6 +53,24 @@ export class UserModel {
     };
   }
 
+  static async findById(id: string): Promise<User | undefined> {
+    const user = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!user) return undefined;
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      createdAt: user.createdAt.toISOString(),
+    };
+  }
+
   static async create(data: RegisterDto): Promise<User> {
     // Cifrado seguro utilizando sal y PBKDF2 de node:crypto
     const salt = crypto.randomBytes(16).toString('hex');
