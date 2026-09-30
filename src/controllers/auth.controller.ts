@@ -100,9 +100,13 @@ export class AuthController {
       return;
     }
 
-    // 5. Responder 200 OK con el usuario sin datos sensibles y token de sesión JWT
+    // 5. Responder 200 OK con el usuario sin datos sensibles y token de sesión JWT válido con información básica y tiempo de expiración (HU #12)
     const userResponse = UserModel.toResponse(user);
-    const token = signJWT({ userId: user.id });
+    const token = signJWT({
+      userId: user.id,
+      username: user.username,
+      email: user.email,
+    });
     res.status(200).json({
       message: 'Inicio de sesión exitoso',
       user: userResponse,
