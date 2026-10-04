@@ -3,12 +3,14 @@ import cors from 'cors';
 import authRouter from './routes/auth.routes.js';
 import listRouter from './routes/list.routes.js';
 import { rateLimiter } from './middlewares/rate-limit.middleware.js';
+import { sanitizationMiddleware } from './middlewares/sanitization.middleware.js';
 
 const app: Express = express();
 
 // Middlewares de seguridad, rate limiting y parsing
 app.use(cors());
 app.use(express.json());
+app.use(sanitizationMiddleware);
 
 // Cabeceras de seguridad (HSTS / HTTPS y protección)
 app.use((_req, res, next) => {

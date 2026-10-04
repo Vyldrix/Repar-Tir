@@ -642,3 +642,128 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
     expect(duration).toBeLessThan(200);
   });
 });
+
+// Saneamiento de entradas y prevención de inyecciones SQL, NoSQL y XSS (HU19)
+describe('Saneamiento de entradas y prevención de inyecciones SQL, NoSQL y XSS (HU19)', () => {
+  const sanitizeTestUser = {
+    username: 'sanitizationUser',
+    email: 'sanitize@example.com',
+    password: 'password12345',
+  };
+
+  const getValidToken = async (): Promise<string> => {
+    await request(app).post('/api/auth/register').send(sanitizeTestUser);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: sanitizeTestUser.email, password: sanitizeTestUser.password });
+    return loginRes.body.token;
+  };
+
+  it('debe sanitizar y escapar caracteres HTML en entradas de texto para prevenir ataques XSS', async () => {
+    const token = await getValidToken();
+    const maliciousPayload = {
+      title: "<script>alert('xss')</script>Lista Segura",
+    };
+
+    const response = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send(maliciousPayload);
+
+    expect(response.status).toBe(201);
+    expect(response.body.title).not.toContain('<script>');
+    expect(response.body.title).not.toContain("alert('xss')");
+    expect(response.body.title).toContain('&lt;script&gt;');
+    expect(response.body.title).toContain('Lista Segura');
+
+    // Verificar que al actualizar y consultar la lista almacenada, los datos persisten sanitizados y no ejecutables
+    const updateRes = await request(app)
+      .put(`/api/lists/${response.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: "<img src=x onerror=alert('xss')>Editada" });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.title).not.toContain('<img');
+    expect(updateRes.body.title).toContain('&lt;img');
+  });
+
+  it('debe rechazar solicitudes con operadores o estructuras de inyección NoSQL', async () => {
+    // Intento de evasión de autenticación mediante operador NoSQL $gt o $ne en lugar de cadena
+    const nosqlPayload = {
+      email: { $gt: '' },
+      password: 'password12345',
+    };
+
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send(nosqlPayload);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('message');
+    expect(response.body.message).toMatch(/maliciosa|NoSQL|no permitido/i);
+  });
+
+  it('debe rechazar solicitudes con patrones de inyección SQL en parámetros o cuerpo', async () => {
+    const token = await getValidToken();
+
+    // Intento de inyección SQL clásica para extraer datos o alterar la consulta
+    const sqlInjectionPayload = {
+      search: "' OR 1=1 --",
+    };
+
+    const response = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send(sqlInjectionPayload);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('message');
+    expect(response.body.message).toMatch(/SQL|maliciosa/i);
+  });
+
+  it('debe rechazar solicitudes con intentos de polución de prototipo (__proto__) o caracteres nulos', async () => {
+    const token = await getValidToken();
+
+    // 1. Intento de Prototype Pollution
+    const pollutionRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send('{"title":"Lista Con Polucion","__proto__":{"isAdmin":true}}');
+
+    expect(pollutionRes.status).toBe(400);
+    expect(pollutionRes.body.message).toMatch(/prototipo|maliciosa/i);
+
+    // 2. Intento de inyección de byte nulo
+    const nullByteRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista\0Maliciosa' });
+
+    expect(nullByteRes.status).toBe(400);
+    expect(nullByteRes.body.message).toMatch(/nulo|maliciosa/i);
+  });
+
+  it('debe garantizar el uso de consultas parametrizadas seguras mediante Prisma', async () => {
+    const token = await getValidToken();
+
+    // Crear una lista con un término inocuo que incluye caracteres especiales comunes
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Compras - Frutas y Verduras' });
+
+    expect(createRes.status).toBe(201);
+
+    // Búsqueda parametrizada segura
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ search: 'Frutas' });
+
+    expect(searchRes.status).toBe(200);
+    expect(searchRes.body.lists.length).toBeGreaterThan(0);
+    expect(searchRes.body.lists[0].title).toContain('Frutas');
+  });
+});
+
