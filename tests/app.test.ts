@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
-import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import { clearRateLimits, getRateLimitAuditLogs } from '../src/middlewares/rate-limit.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -642,3 +642,111 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
     expect(duration).toBeLessThan(200);
   });
 });
+
+// Rate Limiting específico para inicio de sesión (HU18)
+describe('Rate Limiting específico para inicio de sesión (HU18)', () => {
+  it('debe bloquear solicitudes excesivas a POST /api/auth/login desde una misma IP retornando 429 Too Many Requests con mensaje informativo', async () => {
+    const attackerIp = '198.51.100.1';
+
+    // Se realizan 5 intentos (umbral permitido)
+    for (let i = 0; i < 5; i++) {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', attackerIp)
+        .send({ email: 'nonexistent@test.com', password: 'wrongpassword' });
+
+      expect(res.status).not.toBe(429);
+      expect(res.headers).toHaveProperty('ratelimit-limit', '5');
+    }
+
+    // El intento 6 supera el umbral y debe ser bloqueado con 429
+    const blockedRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', attackerIp)
+      .send({ email: 'nonexistent@test.com', password: 'wrongpassword' });
+
+    expect(blockedRes.status).toBe(429);
+    expect(blockedRes.body).toHaveProperty('message');
+    expect(blockedRes.body.message).toMatch(/demasiados intentos/i);
+    expect(blockedRes.headers).toHaveProperty('retry-after');
+  });
+
+  it('debe restringir intentos excesivos orientados a un mismo identificador de usuario desde diferentes IPs', async () => {
+    const victimEmail = 'targetuser@test.com';
+
+    // 5 intentos desde diferentes IPs pero hacia la misma cuenta
+    for (let i = 0; i < 5; i++) {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', `203.0.113.${i + 1}`)
+        .send({ email: victimEmail, password: 'wrongpassword' });
+
+      expect(res.status).not.toBe(429);
+    }
+
+    // El intento 6 desde otra IP pero mismo usuario debe ser bloqueado
+    const blockedRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.99')
+      .send({ email: victimEmail, password: 'wrongpassword' });
+
+    expect(blockedRes.status).toBe(429);
+    expect(blockedRes.body.message).toMatch(/demasiados intentos/i);
+  });
+
+  it('debe asegurar que el limitador estricto de login no afecte a otros endpoints como registro o health check', async () => {
+    const clientIp = '198.51.100.42';
+
+    // Bloquear el endpoint de login agotando los intentos
+    for (let i = 0; i < 6; i++) {
+      await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', clientIp)
+        .send({ email: 'any@test.com', password: 'password' });
+    }
+
+    // El login está bloqueado (429)
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', clientIp)
+      .send({ email: 'any@test.com', password: 'password' });
+    expect(loginRes.status).toBe(429);
+
+    // Sin embargo, /api/health y /api/auth/register no están bloqueados por el limitador de login
+    const healthRes = await request(app)
+      .get('/api/health')
+      .set('X-Forwarded-For', clientIp);
+    expect(healthRes.status).toBe(200);
+
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .set('X-Forwarded-For', clientIp)
+      .send({});
+    // Debe responder con 400 por validación, no 429
+    expect(registerRes.status).toBe(400);
+  });
+
+  it('debe registrar intentos fallidos y excesos de tasa en auditoría, y aplicar extensión temporal ante actividad sospechosa', async () => {
+    const suspiciousIp = '198.51.100.99';
+
+    // Generar intentos fallidos y superar el umbral reiteradamente (>= 10 intentos)
+    for (let i = 0; i < 11; i++) {
+      await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', suspiciousIp)
+        .send({ email: 'audit@test.com', password: 'wrongpassword' });
+    }
+
+    const logs = getRateLimitAuditLogs();
+    expect(logs.length).toBeGreaterThan(0);
+
+    const hasFailedAttempt = logs.some((l) => l.action === 'FAILED_LOGIN_ATTEMPT');
+    const hasRateLimitExceeded = logs.some((l) => l.action === 'RATE_LIMIT_EXCEEDED');
+    const hasExtendedBlock = logs.some((l) => l.action === 'TEMPORARY_BLOCK_EXTENDED');
+
+    expect(hasFailedAttempt).toBe(true);
+    expect(hasRateLimitExceeded).toBe(true);
+    expect(hasExtendedBlock).toBe(true);
+  });
+});
+
