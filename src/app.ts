@@ -1,13 +1,13 @@
 import express, { Express, Request, Response } from 'express';
-import cors from 'cors';
 import authRouter from './routes/auth.routes.js';
 import listRouter from './routes/list.routes.js';
+import { corsMiddleware } from './middlewares/cors.middleware.js';
 import { rateLimiter } from './middlewares/rate-limit.middleware.js';
 
 const app: Express = express();
 
 // Middlewares de seguridad, rate limiting y parsing
-app.use(cors());
+app.use(corsMiddleware);
 app.use(express.json());
 
 // Cabeceras de seguridad (HSTS / HTTPS y protección)
