@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
 import { verifyJWT } from '../src/middlewares/auth.middleware.js';
@@ -740,5 +741,97 @@ describe('Validación de credenciales y generación de JWT en login (HU12)', () 
     expect(res.status).toBe(401);
     expect(res.body).toHaveProperty('message');
     expect(res.body.token).toBeUndefined();
+// Cifrado de contraseñas mediante hash con bcrypt en el registro (HU11).
+describe('Cifrado de contraseñas con Bcrypt en el registro (HU11)', () => {
+  it('debe cifrar la contraseña con el algoritmo bcrypt antes de almacenarla en la base de datos', async () => {
+    const rawPassword = 'PasswordBcrypt123!';
+    const user = {
+      username: 'usuarioBcryptTest',
+      email: 'bcrypt.test@example.com',
+      password: rawPassword,
+    };
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send(user);
+
+    expect(response.status).toBe(201);
+
+    // Consultar el registro directamente en la base de datos
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email },
+    });
+
+    expect(dbUser).toBeDefined();
+    // La contraseña nunca debe ser igual al texto plano
+    expect(dbUser?.passwordHash).not.toBe(rawPassword);
+    // Debe cumplir con el formato de hash de bcrypt ($2a$ o $2b$)
+    expect(dbUser?.passwordHash).toMatch(/^\$2[ab]\$\d{2}\$/);
+    // Debe validar exitosamente con bcrypt.compare
+    const isValid = await bcrypt.compare(rawPassword, dbUser!.passwordHash);
+    expect(isValid).toBe(true);
+  });
+
+  it('debe asegurar que se utilice un factor de costo (salt rounds) adecuado (10 rounds)', async () => {
+    const rawPassword = 'PasswordSaltRounds123!';
+    const user = {
+      username: 'usuarioSaltRounds',
+      email: 'salt.rounds@example.com',
+      password: rawPassword,
+    };
+
+    await request(app)
+      .post('/api/auth/register')
+      .send(user);
+
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email },
+    });
+
+    expect(dbUser).toBeDefined();
+    // En bcrypt, el prefijo indica el algoritmo y las rondas ($2b$10$)
+    expect(dbUser?.passwordHash).toMatch(/^\$2[ab]\$10\$/);
+  });
+
+  it('debe garantizar que en ningún momento se almacene o exponga la contraseña en texto plano durante la creación de la cuenta', async () => {
+    const rawPassword = 'PasswordTextoPlano123!';
+    const user = {
+      username: 'usuarioSinPlano',
+      email: 'sin.plano@example.com',
+      password: rawPassword,
+    };
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send(user);
+
+    expect(response.status).toBe(201);
+    // La respuesta nunca debe exponer la contraseña ni el hash
+    expect(response.body.password).toBeUndefined();
+    expect(response.body.passwordHash).toBeUndefined();
+
+    // Verificación en la base de datos: el texto plano no debe estar guardado
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email },
+    });
+    expect(dbUser?.passwordHash).not.toContain(rawPassword);
+    expect((dbUser as unknown as Record<string, unknown>).password).toBeUndefined();
+  });
+
+  it('debe permitir iniciar sesión con la contraseña en texto plano validándola contra el hash bcrypt', async () => {
+    const user = {
+      username: 'usuarioLoginBcrypt',
+      email: 'login.bcrypt@example.com',
+      password: 'MiPasswordValida456!',
+    };
+
+    await request(app).post('/api/auth/register').send(user);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body).toHaveProperty('token');
   });
 });

@@ -47,7 +47,7 @@ export class AuthController {
       return;
     }
 
-    // 4. Crear usuario con contraseña encriptada y retornar respuesta 201 Created sin datos sensibles
+    // 4. Crear usuario con contraseña cifrada mediante bcrypt (HU #11) y retornar respuesta 201 Created sin datos sensibles
     const newUser = await UserModel.create({ username, email, password });
     const userResponse = UserModel.toResponse(newUser);
 
@@ -91,8 +91,8 @@ export class AuthController {
       return;
     }
 
-    // 4. Validar que la contraseña coincida con la registrada
-    const isPasswordValid = UserModel.verifyPassword(password, user.passwordHash);
+    // 4. Validar que la contraseña coincida con la registrada utilizando bcrypt compare
+    const isPasswordValid = await UserModel.verifyPassword(password, user.passwordHash);
     if (!isPasswordValid) {
       res.status(401).json({
         message: 'La contraseña ingresada no coincide con la registrada',
