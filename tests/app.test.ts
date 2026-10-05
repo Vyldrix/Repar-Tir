@@ -3,6 +3,7 @@ import request from 'supertest';
 import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import { verifyJWT } from '../src/middlewares/auth.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -644,6 +645,102 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
+// Validación de credenciales y generación de JWT al iniciar sesión (HU12).
+describe('Validación de credenciales y generación de JWT en login (HU12)', () => {
+  const credentialsUser = {
+    username: 'userHU12Auth',
+    email: 'hu12.auth@example.com',
+    password: 'PasswordSeguroHU12!',
+  };
+
+  beforeAll(async () => {
+    await request(app).post('/api/auth/register').send(credentialsUser);
+  });
+
+  it('debe verificar la contraseña ingresada contra el hash en base de datos y autenticar exitosamente', async () => {
+    // Consultar el hash almacenado en la base de datos
+    const dbUser = await prisma.user.findUnique({
+      where: { email: credentialsUser.email },
+    });
+    expect(dbUser).toBeDefined();
+    expect(dbUser?.passwordHash).toBeDefined();
+
+    // Autenticar con la contraseña correcta
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: credentialsUser.email, password: credentialsUser.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('token');
+    expect(typeof res.body.token).toBe('string');
+  });
+
+  it('debe generar y firmar un token JWT válido que contenga la información básica del usuario y tiempo de expiración', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: credentialsUser.email, password: credentialsUser.password });
+
+    expect(res.status).toBe(200);
+    const { token } = res.body;
+
+    // Verificar formato estándar JWT (header.payload.signature)
+    const parts = token.split('.');
+    expect(parts.length).toBe(3);
+
+    // Decodificar payload
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+    expect(payload).toHaveProperty('userId');
+    expect(payload.username).toBe(credentialsUser.username);
+    expect(payload.email).toBe(credentialsUser.email);
+    expect(payload).toHaveProperty('exp');
+    expect(payload).toHaveProperty('iat');
+    expect(payload.exp).toBeGreaterThan(payload.iat);
+
+    // Verificar la firma criptográfica del JWT
+    const verification = verifyJWT(token);
+    expect(verification.valid).toBe(true);
+    expect(verification.payload.userId).toBe(payload.userId);
+  });
+
+  it('debe retornar el token JWT en la respuesta 200 OK y permitir su uso en solicitudes autenticadas posteriores', async () => {
+    // 1. Obtener token del login
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: credentialsUser.username, password: credentialsUser.password });
+
+    expect(loginRes.status).toBe(200);
+    const { token } = loginRes.body;
+    expect(token).toBeDefined();
+
+    // 2. Usar token para acceder a un recurso protegido
+    const protectedRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista creada con JWT de HU12' });
+
+    expect(protectedRes.status).toBe(201);
+    expect(protectedRes.body).toHaveProperty('id');
+    expect(protectedRes.body.title).toBe('Lista creada con JWT de HU12');
+  });
+
+  it('debe devolver código de respuesta HTTP 401 Unauthorized si la contraseña es incorrecta', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: credentialsUser.email, password: 'PasswordEquivocada123' });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toHaveProperty('message');
+    expect(res.body.token).toBeUndefined();
+  });
+
+  it('debe devolver código de respuesta HTTP 401 Unauthorized si el usuario o correo no existe', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'usuario.inexistente@example.com', password: credentialsUser.password });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toHaveProperty('message');
+    expect(res.body.token).toBeUndefined();
 // Cifrado de contraseñas mediante hash con bcrypt en el registro (HU11).
 describe('Cifrado de contraseñas con Bcrypt en el registro (HU11)', () => {
   it('debe cifrar la contraseña con el algoritmo bcrypt antes de almacenarla en la base de datos', async () => {
