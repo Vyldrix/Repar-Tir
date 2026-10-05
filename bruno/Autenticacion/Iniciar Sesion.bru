@@ -1,0 +1,74 @@
+meta {
+  name: Iniciar Sesión
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "usuario.ejemplo@example.com",
+    "password": "PasswordSegura123!"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.token) {
+    bru.setEnvVar("token", res.body.token);
+  }
+}
+
+docs {
+  # Iniciar Sesión
+  Autentica las credenciales de un usuario existente (por correo o nombre de usuario) y genera un token JWT firmado.
+  El script posterior a la respuesta guarda automáticamente el token en la variable de entorno `token`.
+
+  ### Encabezados
+  - `Content-Type: application/json`
+
+  ### Cuerpo de la Petición (JSON)
+  - `email` (string, opcional si se envía username): Correo del usuario registrado.
+  - `username` (string, opcional si se envía email): Nombre de usuario registrado.
+  - `password` (string, obligatorio): Contraseña registrada.
+
+  ### Respuestas Esperadas:
+  - **200 OK**: Autenticación exitosa, retorna el token JWT y la información pública del usuario.
+    ```json
+    {
+      "message": "Inicio de sesión exitoso",
+      "user": {
+        "id": "c7b3d8e0-1234-5678-90ab-cdef12345678",
+        "username": "usuarioEjemplo",
+        "email": "usuario.ejemplo@example.com"
+      },
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+  - **400 Bad Request**: Falta ingresar credenciales o el formato del correo es inválido.
+    ```json
+    {
+      "message": "Debe ingresar su correo o nombre de usuario y su contraseña"
+    }
+    ```
+  - **401 Unauthorized**: El usuario no existe o la contraseña no coincide.
+    ```json
+    {
+      "message": "La contraseña ingresada no coincide con la registrada"
+    }
+    ```
+  - **429 Too Many Requests**: Se superó el límite de peticiones de inicio de sesión (Rate Limiting).
+    ```json
+    {
+      "message": "Demasiadas peticiones desde esta IP. Por favor intente más tarde (Too Many Requests)."
+    }
+    ```
+}
