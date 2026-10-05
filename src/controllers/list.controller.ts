@@ -37,16 +37,16 @@ export class ListController {
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
     const { title } = req.body;
 
-    // 1. Validar que la lista exista
+    // 1. Consultar el recurso en la BD antes de modificar para identificar al propietario (HU #16 - IDOR)
     const list = await ListModel.findById(id);
     if (!list) {
       res.status(404).json({ message: 'Lista no encontrada' });
       return;
     }
 
-    // 2. Validar pertenencia del usuario autenticado
-    const userId = (req as any).user?.id;
-    if (list.userId !== userId) {
+    // 2. Comparar el identificador del propietario con el ID del usuario autenticado desde el JWT (HU #16 - IDOR)
+    const userId = (req as any).user?.id || (req as any).user?.userId;
+    if (!userId || list.userId !== userId) {
       res.status(403).json({ message: 'No tienes permiso para editar esta lista' });
       return;
     }

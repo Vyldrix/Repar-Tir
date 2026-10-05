@@ -25,6 +25,10 @@ app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
 app.use('/api/auth', authRouter);
 app.use('/api/lists', listRouter);
 
+// Endpoint HTTP POST /refresh y aliases directos (HU #13)
+app.post('/refresh', AuthController.refresh);
+app.post('/api/refresh', AuthController.refresh);
+
 // Endpoint de verificación de salud del servicio
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
