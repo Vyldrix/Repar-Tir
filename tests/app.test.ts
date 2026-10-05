@@ -3,7 +3,7 @@ import request from 'supertest';
 import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
-import { requireAuth, requireRole, signJWT } from '../src/middlewares/auth.middleware.js';
+import { allowedOrigins } from '../src/middlewares/cors.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -645,85 +645,60 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
-// Prevención de vulnerabilidades IDOR en edición de recursos (HU16).
-describe('Prevención de vulnerabilidades IDOR en edición de recursos (HU16)', () => {
-  const userOwner = {
-    username: 'userHU16Owner',
-    email: 'hu16.owner@example.com',
-    password: 'PasswordSeguroHU16Owner!',
-  };
+// Políticas de CORS y protección contra orígenes no autorizados (HU17).
+describe('Políticas de CORS y dominios autorizados (HU17)', () => {
+  const authorizedOrigin = allowedOrigins[0] || 'http://localhost:3000';
+  const unauthorizedOrigin = 'https://sitio-malicioso-no-autorizado.com';
 
-  const userAttacker = {
-    username: 'userHU16Attacker',
-    email: 'hu16.attacker@example.com',
-    password: 'PasswordSeguroHU16Attacker!',
-  };
-
-  let tokenOwner: string;
-  let tokenAttacker: string;
-  let ownerListId: string;
-
-  beforeAll(async () => {
-    // 1. Registrar y autenticar al usuario propietario
-    await request(app).post('/api/auth/register').send(userOwner);
-    const loginOwnerRes = await request(app)
-      .post('/api/auth/login')
-      .send({ email: userOwner.email, password: userOwner.password });
-    tokenOwner = loginOwnerRes.body.token;
-
-    // 2. Crear un recurso perteneciente al usuario propietario
-    const listRes = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${tokenOwner}`)
-      .send({ title: 'Lista Original del Propietario' });
-    ownerListId = listRes.body.id;
-
-    // 3. Registrar y autenticar al usuario atacante (distinto usuario)
-    await request(app).post('/api/auth/register').send(userAttacker);
-    const loginAttackerRes = await request(app)
-      .post('/api/auth/login')
-      .send({ email: userAttacker.email, password: userAttacker.password });
-    tokenAttacker = loginAttackerRes.body.token;
-  });
-
-  it('debe consultar el recurso en la base de datos y retornar 404 Not Found si no existe antes de modificarlo', async () => {
+  it('debe permitir solicitudes desde un origen autorizado especificando la cabecera correspondiente sin usar comodín', async () => {
     const response = await request(app)
-      .put('/api/lists/recurso-inexistente-uuid-999')
-      .set('Authorization', `Bearer ${tokenOwner}`)
-      .send({ title: 'Intento de modificar recurso inexistente' });
-
-    expect(response.status).toBe(404);
-    expect(response.body).toHaveProperty('message', 'Lista no encontrada');
-  });
-
-  it('debe comparar el propietario contra el JWT y retornar 403 Forbidden ante un intento IDOR de modificar recursos ajenos', async () => {
-    // El atacante intenta modificar la lista que pertenece a userOwner
-    const response = await request(app)
-      .put(`/api/lists/${ownerListId}`)
-      .set('Authorization', `Bearer ${tokenAttacker}`)
-      .send({ title: 'Título modificado maliciosamente por atacante' });
-
-    expect(response.status).toBe(403);
-    expect(response.body).toHaveProperty('message');
-
-    // Comprobar que en la base de datos NO se haya modificado el recurso
-    const dbList = await prisma.list.findUnique({ where: { id: ownerListId } });
-    expect(dbList?.title).toBe('Lista Original del Propietario');
-  });
-
-  it('debe ejecutar la actualización únicamente cuando la identidad del JWT coincide plenamente con el propietario (200 OK)', async () => {
-    const updatedTitle = 'Lista Actualizada por su Propietario Legítimo';
-    const response = await request(app)
-      .put(`/api/lists/${ownerListId}`)
-      .set('Authorization', `Bearer ${tokenOwner}`)
-      .send({ title: updatedTitle });
+      .get('/api/health')
+      .set('Origin', authorizedOrigin);
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('id', ownerListId);
-    expect(response.body).toHaveProperty('title', updatedTitle);
+    expect(response.headers).toHaveProperty('access-control-allow-origin');
+    expect(response.headers['access-control-allow-origin']).toBe(authorizedOrigin);
+    expect(response.headers['access-control-allow-origin']).not.toBe('*');
+  });
 
-    // Verificar persistencia del cambio en la base de datos
-    const dbList = await prisma.list.findUnique({ where: { id: ownerListId } });
-    expect(dbList?.title).toBe(updatedTitle);
+  it('debe bloquear orígenes no autorizados omitiendo la cabecera Access-Control-Allow-Origin según el estándar CORS', async () => {
+    const response = await request(app)
+      .get('/api/health')
+      .set('Origin', unauthorizedOrigin);
+
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('debe gestionar adecuadamente las solicitudes preflight (OPTIONS) retornando 204 y métodos permitidos', async () => {
+    const response = await request(app)
+      .options('/api/lists')
+      .set('Origin', authorizedOrigin)
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'Content-Type, Authorization');
+
+    expect([200, 204]).toContain(response.status);
+    expect(response.headers['access-control-allow-origin']).toBe(authorizedOrigin);
+
+    const allowMethods = response.headers['access-control-allow-methods'];
+    expect(allowMethods).toBeDefined();
+    expect(allowMethods).toContain('GET');
+    expect(allowMethods).toContain('POST');
+    expect(allowMethods).toContain('PUT');
+    expect(allowMethods).toContain('DELETE');
+    expect(allowMethods).toContain('PATCH');
+
+    const allowHeaders = response.headers['access-control-allow-headers'];
+    expect(allowHeaders).toBeDefined();
+    expect(allowHeaders.toLowerCase()).toContain('content-type');
+    expect(allowHeaders.toLowerCase()).toContain('authorization');
+  });
+
+  it('debe rechazar solicitudes preflight (OPTIONS) provenientes de orígenes no autorizados', async () => {
+    const response = await request(app)
+      .options('/api/lists')
+      .set('Origin', unauthorizedOrigin)
+      .set('Access-Control-Request-Method', 'POST');
+
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
   });
 });

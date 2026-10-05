@@ -7,7 +7,7 @@ import {
   PaginatedListsResponseDto,
 } from '../dtos/list.dto.js';
 
-export interface List extends ListResponseDto {}
+export type List = ListResponseDto;
 
 export class ListModel {
   static async create(data: CreateListDto): Promise<List> {
