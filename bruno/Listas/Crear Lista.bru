@@ -1,0 +1,65 @@
+meta {
+  name: Crear Lista
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/lists
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "title": "Lista de Compras Mensual"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("listId", res.body.id);
+  }
+}
+
+docs {
+  # Crear Lista
+  Crea una nueva lista asociada al usuario autenticado.
+  Guarda automáticamente el `id` retornado en la variable de entorno `listId`.
+
+  ### Encabezados
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <token_jwt>` (requerido)
+
+  ### Cuerpo de la Petición (JSON)
+  - `title` (string, obligatorio): Título de la lista (1 a 255 caracteres).
+
+  ### Respuestas Esperadas:
+  - **201 Created**: Lista creada y persistida en base de datos.
+    ```json
+    {
+      "id": "e4f5a6b7-8901-2345-6789-abcdef012345",
+      "title": "Lista de Compras Mensual",
+      "userId": "c7b3d8e0-1234-5678-90ab-cdef12345678",
+      "createdAt": "2026-10-04T20:10:00.000Z",
+      "updatedAt": "2026-10-04T20:10:00.000Z"
+    }
+    ```
+  - **400 Bad Request**: Título ausente, vacío o que supera los 255 caracteres.
+    ```json
+    {
+      "message": "El título de la lista no puede estar vacío"
+    }
+    ```
+  - **401 Unauthorized**: Token de autenticación ausente, inválido o expirado.
+    ```json
+    {
+      "message": "Acceso denegado: Token no proporcionado o inválido"
+    }
+    ```
+}

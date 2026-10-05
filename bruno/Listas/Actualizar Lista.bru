@@ -1,0 +1,73 @@
+meta {
+  name: Actualizar Lista
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/lists/{{listId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "title": "Lista de Compras Mensual (Actualizada)"
+  }
+}
+
+docs {
+  # Actualizar Lista
+  Modifica el título de una lista existente. Valida que el recurso exista y que el usuario autenticado sea su legítimo propietario (protección IDOR).
+
+  ### Parámetros de Ruta
+  - `id`: Identificador único de la lista (`{{listId}}`).
+
+  ### Encabezados
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <token_jwt>` (requerido)
+
+  ### Cuerpo de la Petición (JSON)
+  - `title` (string, obligatorio): Nuevo título de la lista (1 a 255 caracteres).
+
+  ### Respuestas Esperadas:
+  - **200 OK**: Lista actualizada con nueva fecha `updatedAt`.
+    ```json
+    {
+      "id": "e4f5a6b7-8901-2345-6789-abcdef012345",
+      "title": "Lista de Compras Mensual (Actualizada)",
+      "userId": "c7b3d8e0-1234-5678-90ab-cdef12345678",
+      "createdAt": "2026-10-04T20:10:00.000Z",
+      "updatedAt": "2026-10-04T20:15:00.000Z"
+    }
+    ```
+  - **400 Bad Request**: Título inválido, vacío o superior a 255 caracteres.
+    ```json
+    {
+      "message": "El título no puede estar vacío"
+    }
+    ```
+  - **401 Unauthorized**: Token de autenticación ausente o inválido.
+    ```json
+    {
+      "message": "Acceso denegado: Token no proporcionado o inválido"
+    }
+    ```
+  - **403 Forbidden**: La lista pertenece a otro usuario (intento de acceso IDOR bloqueado).
+    ```json
+    {
+      "message": "No tienes permiso para editar esta lista"
+    }
+    ```
+  - **404 Not Found**: La lista con el identificador proporcionado no existe.
+    ```json
+    {
+      "message": "Lista no encontrada"
+    }
+    ```
+}

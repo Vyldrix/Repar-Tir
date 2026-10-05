@@ -1,0 +1,60 @@
+meta {
+  name: Registrar Usuario
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "usuarioEjemplo",
+    "email": "usuario.ejemplo@example.com",
+    "password": "PasswordSegura123!"
+  }
+}
+
+docs {
+  # Registrar Usuario
+  Registra un nuevo usuario en el sistema con su contraseña cifrada mediante bcrypt.
+
+  ### Encabezados
+  - `Content-Type: application/json`
+
+  ### Cuerpo de la Petición (JSON)
+  - `username` (string, obligatorio): Nombre de usuario único.
+  - `email` (string, obligatorio): Correo electrónico válido y único.
+  - `password` (string, obligatorio): Contraseña de al menos 6 caracteres.
+
+  ### Respuestas Esperadas:
+  - **201 Created**: Usuario creado exitosamente (los datos sensibles como contraseñas son excluidos).
+    ```json
+    {
+      "id": "c7b3d8e0-1234-5678-90ab-cdef12345678",
+      "username": "usuarioEjemplo",
+      "email": "usuario.ejemplo@example.com",
+      "createdAt": "2026-10-04T20:00:00.000Z",
+      "updatedAt": "2026-10-04T20:00:00.000Z"
+    }
+    ```
+  - **400 Bad Request**: Campos obligatorios faltantes, email malformado o contraseña menor a 6 caracteres.
+    ```json
+    {
+      "message": "Todos los campos (username, email, password) son obligatorios"
+    }
+    ```
+  - **409 Conflict**: El correo electrónico o nombre de usuario ya se encuentra registrado.
+    ```json
+    {
+      "message": "El correo electrónico ya se encuentra registrado"
+    }
+    ```
+}
