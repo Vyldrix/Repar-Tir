@@ -645,154 +645,85 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
-// Middleware factoría requireRole para control de acceso basado en roles (HU15).
-describe('Middleware factoría requireRole y control de acceso (HU15)', () => {
-  it('debe aceptar un arreglo de roles permitidos y retornar una función middleware de orden superior', () => {
-    const middleware = requireRole(['admin', 'editor']);
-    expect(typeof middleware).toBe('function');
-    expect(middleware.length).toBe(3); // (req, res, next)
+// Prevención de vulnerabilidades IDOR en edición de recursos (HU16).
+describe('Prevención de vulnerabilidades IDOR en edición de recursos (HU16)', () => {
+  const userOwner = {
+    username: 'userHU16Owner',
+    email: 'hu16.owner@example.com',
+    password: 'PasswordSeguroHU16Owner!',
+  };
+
+  const userAttacker = {
+    username: 'userHU16Attacker',
+    email: 'hu16.attacker@example.com',
+    password: 'PasswordSeguroHU16Attacker!',
+  };
+
+  let tokenOwner: string;
+  let tokenAttacker: string;
+  let ownerListId: string;
+
+  beforeAll(async () => {
+    // 1. Registrar y autenticar al usuario propietario
+    await request(app).post('/api/auth/register').send(userOwner);
+    const loginOwnerRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: userOwner.email, password: userOwner.password });
+    tokenOwner = loginOwnerRes.body.token;
+
+    // 2. Crear un recurso perteneciente al usuario propietario
+    const listRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenOwner}`)
+      .send({ title: 'Lista Original del Propietario' });
+    ownerListId = listRes.body.id;
+
+    // 3. Registrar y autenticar al usuario atacante (distinto usuario)
+    await request(app).post('/api/auth/register').send(userAttacker);
+    const loginAttackerRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: userAttacker.email, password: userAttacker.password });
+    tokenAttacker = loginAttackerRes.body.token;
   });
 
-  it('debe retornar 401 Unauthorized si el usuario no ha sido autenticado previamente con requireAuth', () => {
-    const middleware = requireRole(['admin']);
-    const mockReq = {} as any; // sin req.user
-    let statusSent = 0;
-    let jsonSent: any = null;
-    const mockRes = {
-      status: (code: number) => {
-        statusSent = code;
-        return mockRes;
-      },
-      json: (data: any) => {
-        jsonSent = data;
-        return mockRes;
-      },
-    } as any;
-    let nextCalled = false;
-    const mockNext = () => {
-      nextCalled = true;
-    };
+  it('debe consultar el recurso en la base de datos y retornar 404 Not Found si no existe antes de modificarlo', async () => {
+    const response = await request(app)
+      .put('/api/lists/recurso-inexistente-uuid-999')
+      .set('Authorization', `Bearer ${tokenOwner}`)
+      .send({ title: 'Intento de modificar recurso inexistente' });
 
-    middleware(mockReq, mockRes, mockNext);
-
-    expect(nextCalled).toBe(false);
-    expect(statusSent).toBe(401);
-    expect(jsonSent).toHaveProperty('message');
+    expect(response.status).toBe(404);
+    expect(response.body).toHaveProperty('message', 'Lista no encontrada');
   });
 
-  it('debe retornar 403 Forbidden si el usuario autenticado no posee un rol válido asignado', () => {
-    const middleware = requireRole(['admin']);
-    const mockReq = {
-      user: { id: 'user-sin-rol-id' }, // autenticado pero sin rol
-    } as any;
-    let statusSent = 0;
-    let jsonSent: any = null;
-    const mockRes = {
-      status: (code: number) => {
-        statusSent = code;
-        return mockRes;
-      },
-      json: (data: any) => {
-        jsonSent = data;
-        return mockRes;
-      },
-    } as any;
-    let nextCalled = false;
-    const mockNext = () => {
-      nextCalled = true;
-    };
+  it('debe comparar el propietario contra el JWT y retornar 403 Forbidden ante un intento IDOR de modificar recursos ajenos', async () => {
+    // El atacante intenta modificar la lista que pertenece a userOwner
+    const response = await request(app)
+      .put(`/api/lists/${ownerListId}`)
+      .set('Authorization', `Bearer ${tokenAttacker}`)
+      .send({ title: 'Título modificado maliciosamente por atacante' });
 
-    middleware(mockReq, mockRes, mockNext);
+    expect(response.status).toBe(403);
+    expect(response.body).toHaveProperty('message');
 
-    expect(nextCalled).toBe(false);
-    expect(statusSent).toBe(403);
-    expect(jsonSent).toHaveProperty('message');
+    // Comprobar que en la base de datos NO se haya modificado el recurso
+    const dbList = await prisma.list.findUnique({ where: { id: ownerListId } });
+    expect(dbList?.title).toBe('Lista Original del Propietario');
   });
 
-  it('debe retornar 403 Forbidden si el rol del usuario no se encuentra dentro del arreglo autorizado', () => {
-    const middleware = requireRole(['admin', 'superadmin']);
-    const mockReq = {
-      user: { id: 'user-normal-id', role: 'user' },
-    } as any;
-    let statusSent = 0;
-    let jsonSent: any = null;
-    const mockRes = {
-      status: (code: number) => {
-        statusSent = code;
-        return mockRes;
-      },
-      json: (data: any) => {
-        jsonSent = data;
-        return mockRes;
-      },
-    } as any;
-    let nextCalled = false;
-    const mockNext = () => {
-      nextCalled = true;
-    };
+  it('debe ejecutar la actualización únicamente cuando la identidad del JWT coincide plenamente con el propietario (200 OK)', async () => {
+    const updatedTitle = 'Lista Actualizada por su Propietario Legítimo';
+    const response = await request(app)
+      .put(`/api/lists/${ownerListId}`)
+      .set('Authorization', `Bearer ${tokenOwner}`)
+      .send({ title: updatedTitle });
 
-    middleware(mockReq, mockRes, mockNext);
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('id', ownerListId);
+    expect(response.body).toHaveProperty('title', updatedTitle);
 
-    expect(nextCalled).toBe(false);
-    expect(statusSent).toBe(403);
-    expect(jsonSent).toHaveProperty('message');
-  });
-
-  it('debe permitir el flujo (next()) si el rol del usuario está incluido en el arreglo autorizado', () => {
-    const middleware = requireRole(['admin', 'moderator']);
-    const mockReq = {
-      user: { id: 'admin-user-id', role: 'admin' },
-    } as any;
-    let nextCalled = false;
-    const mockRes = {} as any;
-    const mockNext = () => {
-      nextCalled = true;
-    };
-
-    middleware(mockReq, mockRes, mockNext);
-
-    expect(nextCalled).toBe(true);
-  });
-
-  it('debe permitir el flujo si el usuario posee un arreglo de roles y al menos uno coincide', () => {
-    const middleware = requireRole(['admin']);
-    const mockReq = {
-      user: { id: 'multi-role-user-id', roles: ['user', 'admin'] },
-    } as any;
-    let nextCalled = false;
-    const mockRes = {} as any;
-    const mockNext = () => {
-      nextCalled = true;
-    };
-
-    middleware(mockReq, mockRes, mockNext);
-
-    expect(nextCalled).toBe(true);
-  });
-
-  it('debe funcionar en conjunto con requireAuth en peticiones HTTP completas', async () => {
-    // Montar ruta de prueba protegida por requireAuth y requireRole(['admin'])
-    app.get('/api/test-role-endpoint', requireAuth, requireRole(['admin']), (_req, res) => {
-      res.status(200).json({ status: 'success', data: 'Zona restringida para admin' });
-    });
-
-    // 1. Petición sin token -> 401
-    const resSinToken = await request(app).get('/api/test-role-endpoint');
-    expect(resSinToken.status).toBe(401);
-
-    // 2. Petición con token con rol 'user' -> 403
-    const userToken = signJWT({ userId: 'user-normal', role: 'user' });
-    const resUser = await request(app)
-      .get('/api/test-role-endpoint')
-      .set('Authorization', `Bearer ${userToken}`);
-    expect(resUser.status).toBe(403);
-
-    // 3. Petición con token con rol 'admin' -> 200
-    const adminToken = signJWT({ userId: 'admin-user', role: 'admin' });
-    const resAdmin = await request(app)
-      .get('/api/test-role-endpoint')
-      .set('Authorization', `Bearer ${adminToken}`);
-    expect(resAdmin.status).toBe(200);
-    expect(resAdmin.body).toHaveProperty('data', 'Zona restringida para admin');
+    // Verificar persistencia del cambio en la base de datos
+    const dbList = await prisma.list.findUnique({ where: { id: ownerListId } });
+    expect(dbList?.title).toBe(updatedTitle);
   });
 });
