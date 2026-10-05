@@ -1,0 +1,28 @@
+meta {
+  name: Verificar Estado de la API
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/health
+  body: none
+  auth: none
+}
+
+docs {
+  # Verificar Estado de la API
+  Endpoint público de comprobación de salud y operatividad del servicio backend Repar-Tir.
+
+  ### Encabezados
+  - No requiere encabezados especiales ni autenticación.
+
+  ### Respuestas Esperadas:
+  - **200 OK**: El servicio se encuentra en línea y operativo.
+    ```json
+    {
+      "status": "ok",
+      "message": "Repar-Tir API en funcionamiento"
+    }
+    ```
+}

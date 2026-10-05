@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import fs from 'node:fs';
+import path from 'node:path';
 import app from '../src/app.js';
-import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import { clearRateLimits, getRateLimitAuditLogs } from '../src/middlewares/rate-limit.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -642,3 +644,143 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
     expect(duration).toBeLessThan(200);
   });
 });
+
+// Colección de Bruno para consulta y prueba de endpoints (HU20)
+describe('Colección de Bruno para consulta y prueba de endpoints (HU20)', () => {
+  const brunoDir = path.resolve(process.cwd(), 'bruno');
+
+  it('debe existir el archivo bruno.json configurado correctamente para la colección', () => {
+    const brunoJsonPath = path.join(brunoDir, 'bruno.json');
+    expect(fs.existsSync(brunoJsonPath)).toBe(true);
+
+    const content = JSON.parse(fs.readFileSync(brunoJsonPath, 'utf8'));
+    expect(content).toHaveProperty('name', 'Repar-Tir API');
+    expect(content).toHaveProperty('type', 'collection');
+    expect(content).toHaveProperty('version', '1');
+  });
+
+  it('debe contener entornos configurados con variables clave (baseUrl, token, listId)', () => {
+    const envDir = path.join(brunoDir, 'environments');
+    expect(fs.existsSync(envDir)).toBe(true);
+
+    const localEnvPath = path.join(envDir, 'Local.bru');
+    const prodEnvPath = path.join(envDir, 'Production.bru');
+
+    expect(fs.existsSync(localEnvPath)).toBe(true);
+    expect(fs.existsSync(prodEnvPath)).toBe(true);
+
+    const localContent = fs.readFileSync(localEnvPath, 'utf8');
+    expect(localContent).toContain('baseUrl:');
+    expect(localContent).toContain('token:');
+    expect(localContent).toContain('listId:');
+
+    const prodContent = fs.readFileSync(prodEnvPath, 'utf8');
+    expect(prodContent).toContain('baseUrl:');
+  });
+
+  it('debe organizar los recursos en módulos estructurados (Health, Autenticacion, Listas)', () => {
+    const expectedModules = ['Health', 'Autenticacion', 'Listas'];
+
+    for (const mod of expectedModules) {
+      const modulePath = path.join(brunoDir, mod);
+      expect(fs.existsSync(modulePath)).toBe(true);
+      expect(fs.statSync(modulePath).isDirectory()).toBe(true);
+    }
+  });
+
+  it('debe incluir todos los endpoints desarrollados con métodos, encabezados y cuerpos JSON requeridos', () => {
+    const expectedRequests = [
+      {
+        file: path.join(brunoDir, 'Health', 'Verificar Estado.bru'),
+        method: 'get',
+        urlPart: '/api/health',
+        requiresAuth: false,
+      },
+      {
+        file: path.join(brunoDir, 'Autenticacion', 'Registrar Usuario.bru'),
+        method: 'post',
+        urlPart: '/api/auth/register',
+        requiresAuth: false,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Autenticacion', 'Iniciar Sesion.bru'),
+        method: 'post',
+        urlPart: '/api/auth/login',
+        requiresAuth: false,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Crear Lista.bru'),
+        method: 'post',
+        urlPart: '/api/lists',
+        requiresAuth: true,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Buscar Listas.bru'),
+        method: 'post',
+        urlPart: '/api/lists/search',
+        requiresAuth: true,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Actualizar Lista.bru'),
+        method: 'put',
+        urlPart: '/api/lists/{{listId}}',
+        requiresAuth: true,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Eliminar Lista.bru'),
+        method: 'delete',
+        urlPart: '/api/lists/{{listId}}',
+        requiresAuth: true,
+      },
+    ];
+
+    for (const reqInfo of expectedRequests) {
+      expect(fs.existsSync(reqInfo.file)).toBe(true);
+      const content = fs.readFileSync(reqInfo.file, 'utf8');
+
+      expect(content).toContain(reqInfo.method);
+      expect(content).toContain(reqInfo.urlPart);
+
+      if (reqInfo.requiresAuth) {
+        expect(content).toMatch(/Authorization:\s*Bearer/i);
+      }
+
+      if (reqInfo.requiresJsonBody) {
+        expect(content).toMatch(/Content-Type:\s*application\/json/i);
+        expect(content).toContain('body:json');
+      }
+    }
+  });
+
+  it('debe documentar detalladamente las respuestas exitosas (200, 201) y de error (400, 401, 403, 404)', () => {
+    const filesWithDocs = [
+      path.join(brunoDir, 'Health', 'Verificar Estado.bru'),
+      path.join(brunoDir, 'Autenticacion', 'Registrar Usuario.bru'),
+      path.join(brunoDir, 'Autenticacion', 'Iniciar Sesion.bru'),
+      path.join(brunoDir, 'Listas', 'Crear Lista.bru'),
+      path.join(brunoDir, 'Listas', 'Buscar Listas.bru'),
+      path.join(brunoDir, 'Listas', 'Actualizar Lista.bru'),
+      path.join(brunoDir, 'Listas', 'Eliminar Lista.bru'),
+    ];
+
+    const allDocsCombined = filesWithDocs
+      .map((f) => fs.readFileSync(f, 'utf8'))
+      .join('\n');
+
+    // Validar presencia de respuestas exitosas documentadas
+    expect(allDocsCombined).toContain('200 OK');
+    expect(allDocsCombined).toContain('201 Created');
+
+    // Validar presencia de respuestas de error documentadas
+    expect(allDocsCombined).toContain('400 Bad Request');
+    expect(allDocsCombined).toContain('401 Unauthorized');
+    expect(allDocsCombined).toContain('403 Forbidden');
+    expect(allDocsCombined).toContain('404 Not Found');
+  });
+});
+
