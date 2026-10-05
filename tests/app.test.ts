@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
 import { requireAuth, requireRole, signJWT } from '../src/middlewares/auth.middleware.js';

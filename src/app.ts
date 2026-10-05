@@ -2,6 +2,7 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import authRouter from './routes/auth.routes.js';
 import listRouter from './routes/list.routes.js';
+import { AuthController } from './controllers/auth.controller.js';
 import { rateLimiter } from './middlewares/rate-limit.middleware.js';
 
 const app: Express = express();
@@ -24,6 +25,10 @@ app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
 // Rutas
 app.use('/api/auth', authRouter);
 app.use('/api/lists', listRouter);
+
+// Endpoint HTTP POST /refresh y aliases directos (HU #13)
+app.post('/refresh', AuthController.refresh);
+app.post('/api/refresh', AuthController.refresh);
 
 // Endpoint de verificación de salud del servicio
 app.get('/api/health', (_req: Request, res: Response) => {
