@@ -52,7 +52,7 @@ export class AuthController {
       return;
     }
 
-    // 4. Crear usuario con contraseña encriptada y retornar respuesta 201 Created sin datos sensibles
+    // 4. Crear usuario con contraseña cifrada mediante bcrypt (HU #11) y retornar respuesta 201 Created sin datos sensibles
     const newUser = await UserModel.create({ username, email, password });
     const userResponse = UserModel.toResponse(newUser);
 
@@ -96,8 +96,8 @@ export class AuthController {
       return;
     }
 
-    // 4. Validar que la contraseña coincida con la registrada
-    const isPasswordValid = UserModel.verifyPassword(password, user.passwordHash);
+    // 4. Validar que la contraseña coincida con la registrada utilizando bcrypt compare
+    const isPasswordValid = await UserModel.verifyPassword(password, user.passwordHash);
     if (!isPasswordValid) {
       res.status(401).json({
         message: 'La contraseña ingresada no coincide con la registrada',
@@ -114,6 +114,10 @@ export class AuthController {
       email: user.email,
     });
     const refreshToken = signRefreshToken({
+      userId: user.id,
+    // 5. Responder 200 OK con el usuario sin datos sensibles y token de sesión JWT válido con información básica y tiempo de expiración (HU #12)
+    const userResponse = UserModel.toResponse(user);
+    const token = signJWT({
       userId: user.id,
       username: user.username,
       email: user.email,
