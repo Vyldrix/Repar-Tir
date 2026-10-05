@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import authRouter from './routes/auth.routes.js';
 import listRouter from './routes/list.routes.js';
+import { AuthController } from './controllers/auth.controller.js';
 import { corsMiddleware } from './middlewares/cors.middleware.js';
 import { rateLimiter } from './middlewares/rate-limit.middleware.js';
 import { sanitizationMiddleware } from './middlewares/sanitization.middleware.js';

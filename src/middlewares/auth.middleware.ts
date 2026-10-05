@@ -151,7 +151,7 @@ export function verifyRefreshToken(token: string): { valid: boolean; payload?: a
   }
 }
 
-export const authenticateToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   // 1. Validar presencia del encabezado Authorization con esquema Bearer
@@ -176,8 +176,10 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     }
     (req as any).user = {
       id: verification.payload.userId || verification.payload.id,
+      userId: verification.payload.userId || verification.payload.id,
       username: verification.payload.username,
       email: verification.payload.email,
+      ...verification.payload,
     };
     next();
     return;

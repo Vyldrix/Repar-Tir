@@ -115,10 +115,6 @@ export class AuthController {
     });
     const refreshToken = signRefreshToken({
       userId: user.id,
-    // 5. Responder 200 OK con el usuario sin datos sensibles y token de sesión JWT válido con información básica y tiempo de expiración (HU #12)
-    const userResponse = UserModel.toResponse(user);
-    const token = signJWT({
-      userId: user.id,
       username: user.username,
       email: user.email,
     });
