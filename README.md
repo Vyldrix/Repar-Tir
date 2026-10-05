@@ -1,6 +1,3 @@
-# Repar-Tir.
-
-.
 # Repar-Tir
 
 ![Node.js](https://img.shields.io/badge/Node.js-20.x%20%7C%2022.x-339933?style=for-the-badge&logo=node.js&logoColor=white)
