@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
 import { UserModel } from '../models/user.model.js';
-import { signJWT } from '../middlewares/auth.middleware.js';
+import {
+  signJWT,
+  signRefreshToken,
+  verifyRefreshToken,
+  RefreshTokenStore,
+} from '../middlewares/auth.middleware.js';
 
 export class AuthController {
   static async register(req: Request, res: Response): Promise<void> {
@@ -100,6 +105,16 @@ export class AuthController {
       return;
     }
 
+    // 5. Responder 200 OK con el usuario sin datos sensibles, access token JWT y refresh token (HU #13)
+    const userResponse = UserModel.toResponse(user);
+    const token = signJWT({
+      userId: user.id,
+      id: user.id,
+      username: user.username,
+      email: user.email,
+    });
+    const refreshToken = signRefreshToken({
+      userId: user.id,
     // 5. Responder 200 OK con el usuario sin datos sensibles y token de sesión JWT válido con información básica y tiempo de expiración (HU #12)
     const userResponse = UserModel.toResponse(user);
     const token = signJWT({
@@ -111,6 +126,73 @@ export class AuthController {
       message: 'Inicio de sesión exitoso',
       user: userResponse,
       token,
+      accessToken: token,
+      refreshToken,
     });
+  }
+
+  static async refresh(req: Request, res: Response): Promise<void> {
+    const refreshToken = req.body?.refreshToken || req.body?.token;
+
+    // 1. Validar que la solicitud incluya un refresh token
+    if (!refreshToken || typeof refreshToken !== 'string' || refreshToken.trim() === '') {
+      res.status(400).json({
+        message: 'El refresh token es obligatorio',
+      });
+      return;
+    }
+
+    // 2. Validar firma y vigencia del refresh token
+    const verification = verifyRefreshToken(refreshToken);
+    if (!verification.valid) {
+      const statusCode = verification.status || 401;
+      res.status(statusCode).json({
+        message: `No autorizado: ${verification.error}`,
+      });
+      return;
+    }
+
+    // 3. Verificar en el almacenamiento de tokens la validez y estado del refresh token
+    const tokenRecord = RefreshTokenStore.get(refreshToken);
+    if (!tokenRecord || tokenRecord.status === 'revoked') {
+      res.status(403).json({
+        message: 'El refresh token ha sido revocado o no es válido',
+      });
+      return;
+    }
+
+    // 4. Verificar que el usuario exista en la base de datos
+    const userId = verification.payload?.userId || verification.payload?.id;
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      res.status(401).json({
+        message: 'El usuario asociado al refresh token no se encuentra registrado',
+      });
+      return;
+    }
+
+    // 5. Generar y retornar nuevo access token JWT válido (HTTP 200 OK)
+    const newAccessToken = signJWT({
+      userId: user.id,
+      id: user.id,
+      username: user.username,
+      email: user.email,
+    });
+
+    res.status(200).json({
+      message: 'Token renovado exitosamente',
+      accessToken: newAccessToken,
+      token: newAccessToken,
+    });
+  }
+
+  static async revoke(req: Request, res: Response): Promise<void> {
+    const refreshToken = req.body?.refreshToken || req.body?.token;
+    if (!refreshToken || typeof refreshToken !== 'string' || refreshToken.trim() === '') {
+      res.status(400).json({ message: 'El refresh token es obligatorio' });
+      return;
+    }
+    RefreshTokenStore.revoke(refreshToken);
+    res.status(200).json({ message: 'Refresh token revocado exitosamente' });
   }
 }

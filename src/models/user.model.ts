@@ -68,6 +68,24 @@ export class UserModel {
     };
   }
 
+  static async findById(id: string): Promise<User | undefined> {
+    const user = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!user) return undefined;
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      createdAt: user.createdAt.toISOString(),
+    };
+  }
+
   static async create(data: RegisterDto): Promise<User> {
     // Cifrar la contraseña con el algoritmo bcrypt utilizando un factor de costo adecuado antes de persistir
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_SALT_ROUNDS);

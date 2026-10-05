@@ -3,6 +3,7 @@ import request from 'supertest';
 import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
+import { signRefreshToken, RefreshTokenStore } from '../src/middlewares/auth.middleware.js';
 import { verifyJWT } from '../src/middlewares/auth.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
@@ -645,6 +646,102 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
+// Renovación de tokens JWT mediante endpoint HTTP POST /refresh (HU13).
+describe('Endpoint HTTP POST /refresh y renovación de tokens JWT (HU13)', () => {
+  const testUser = {
+    username: 'userHU13Refresh',
+    email: 'hu13.refresh@example.com',
+    password: 'PasswordSeguroHU13!',
+  };
+
+  let validRefreshToken: string;
+  let userId: string;
+
+  beforeAll(async () => {
+    const regRes = await request(app).post('/api/auth/register').send(testUser);
+    userId = regRes.body.id;
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: testUser.email, password: testUser.password });
+
+    validRefreshToken = loginRes.body.refreshToken;
+  });
+
+  it('debe validar que la solicitud incluya un refresh token válido retornando 400 si no se proporciona', async () => {
+    // Solicitud sin body
+    const resSinToken = await request(app).post('/refresh').send({});
+    expect([400, 401]).toContain(resSinToken.status);
+    expect(resSinToken.body).toHaveProperty('message');
+
+    // Solicitud con token vacío
+    const resVacio = await request(app).post('/refresh').send({ refreshToken: '   ' });
+    expect([400, 401]).toContain(resVacio.status);
+  });
+
+  it('debe retornar 200 OK y un nuevo access token JWT válido cuando el refresh token es correcto', async () => {
+    const response = await request(app)
+      .post('/refresh')
+      .send({ refreshToken: validRefreshToken });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('accessToken');
+    const newAccessToken = response.body.accessToken || response.body.token;
+    expect(typeof newAccessToken).toBe('string');
+
+    // Probar que el nuevo token permite acceder a un endpoint protegido
+    const accessProtected = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${newAccessToken}`)
+      .send({ title: 'Lista creada con nuevo access token renovado' });
+
+    expect(accessProtected.status).toBe(201);
+  });
+
+  it('debe funcionar tanto en POST /refresh como en POST /api/auth/refresh', async () => {
+    const resAlias = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: validRefreshToken });
+
+    expect(resAlias.status).toBe(200);
+    expect(resAlias.body).toHaveProperty('accessToken');
+  });
+
+  it('debe verificar en el almacenamiento de tokens la validez y estado retornando 403 Forbidden si fue revocado', async () => {
+    // Crear un token específico y revocarlo en el almacenamiento
+    const tokenToRevoke = signRefreshToken({ userId, username: testUser.username });
+    RefreshTokenStore.revoke(tokenToRevoke);
+
+    const response = await request(app)
+      .post('/refresh')
+      .send({ refreshToken: tokenToRevoke });
+
+    expect([401, 403]).toContain(response.status);
+    expect(response.status).toBe(403);
+    expect(response.body).toHaveProperty('message');
+  });
+
+  it('debe retornar 401 Unauthorized si el refresh token tiene una firma adulterada o es inválido', async () => {
+    const invalidToken = validRefreshToken + 'corrupted_signature';
+
+    const response = await request(app)
+      .post('/refresh')
+      .send({ refreshToken: invalidToken });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toHaveProperty('message');
+  });
+
+  it('debe retornar 401 Unauthorized si el refresh token ha expirado', async () => {
+    // Crear token expirado (-10 segundos de vigencia)
+    const expiredToken = signRefreshToken({ userId, username: testUser.username }, -10);
+
+    const response = await request(app)
+      .post('/refresh')
+      .send({ refreshToken: expiredToken });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toHaveProperty('message');
 // Validación de credenciales y generación de JWT al iniciar sesión (HU12).
 describe('Validación de credenciales y generación de JWT en login (HU12)', () => {
   const credentialsUser = {
