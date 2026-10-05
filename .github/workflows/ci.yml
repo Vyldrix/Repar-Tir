@@ -15,6 +15,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DATABASE_URL: "file:./ci.db"
+
 jobs:
   code-quality:
     name: 🧹 Calidad y Tipos (ESLint & TypeScript)
