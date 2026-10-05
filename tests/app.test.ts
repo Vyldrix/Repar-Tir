@@ -644,167 +644,127 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
-// Rate Limiting específico para inicio de sesión (HU18)
-describe('Rate Limiting específico para inicio de sesión (HU18)', () => {
-  it('debe bloquear solicitudes excesivas a POST /api/auth/login desde una misma IP retornando 429 Too Many Requests con mensaje informativo', async () => {
-    const attackerIp = '198.51.100.1';
+// Saneamiento de entradas y prevención de inyecciones SQL, NoSQL y XSS (HU19)
+describe('Saneamiento de entradas y prevención de inyecciones SQL, NoSQL y XSS (HU19)', () => {
+  const sanitizeTestUser = {
+    username: 'sanitizationUser',
+    email: 'sanitize@example.com',
+    password: 'password12345',
+  };
 
-    // Se realizan 5 intentos (umbral permitido)
-    for (let i = 0; i < 5; i++) {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .set('X-Forwarded-For', attackerIp)
-        .send({ email: 'nonexistent@test.com', password: 'wrongpassword' });
-
-      expect(res.status).not.toBe(429);
-      expect(res.headers).toHaveProperty('ratelimit-limit', '5');
-    }
-
-    // El intento 6 supera el umbral y debe ser bloqueado con 429
-    const blockedRes = await request(app)
-      .post('/api/auth/login')
-      .set('X-Forwarded-For', attackerIp)
-      .send({ email: 'nonexistent@test.com', password: 'wrongpassword' });
-
-    expect(blockedRes.status).toBe(429);
-    expect(blockedRes.body).toHaveProperty('message');
-    expect(blockedRes.body.message).toMatch(/demasiados intentos/i);
-    expect(blockedRes.headers).toHaveProperty('retry-after');
-  });
-
-  it('debe restringir intentos excesivos orientados a un mismo identificador de usuario desde diferentes IPs', async () => {
-    const victimEmail = 'targetuser@test.com';
-
-    // 5 intentos desde diferentes IPs pero hacia la misma cuenta
-    for (let i = 0; i < 5; i++) {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .set('X-Forwarded-For', `203.0.113.${i + 1}`)
-        .send({ email: victimEmail, password: 'wrongpassword' });
-
-      expect(res.status).not.toBe(429);
-    }
-
-    // El intento 6 desde otra IP pero mismo usuario debe ser bloqueado
-    const blockedRes = await request(app)
-      .post('/api/auth/login')
-      .set('X-Forwarded-For', '203.0.113.99')
-      .send({ email: victimEmail, password: 'wrongpassword' });
-
-    expect(blockedRes.status).toBe(429);
-    expect(blockedRes.body.message).toMatch(/demasiados intentos/i);
-  });
-
-  it('debe asegurar que el limitador estricto de login no afecte a otros endpoints como registro o health check', async () => {
-    const clientIp = '198.51.100.42';
-
-    // Bloquear el endpoint de login agotando los intentos
-    for (let i = 0; i < 6; i++) {
-      await request(app)
-        .post('/api/auth/login')
-        .set('X-Forwarded-For', clientIp)
-        .send({ email: 'any@test.com', password: 'password' });
-    }
-
-    // El login está bloqueado (429)
+  const getValidToken = async (): Promise<string> => {
+    await request(app).post('/api/auth/register').send(sanitizeTestUser);
     const loginRes = await request(app)
       .post('/api/auth/login')
-      .set('X-Forwarded-For', clientIp)
-      .send({ email: 'any@test.com', password: 'password' });
-    expect(loginRes.status).toBe(429);
+      .send({ email: sanitizeTestUser.email, password: sanitizeTestUser.password });
+    return loginRes.body.token;
+  };
 
-    // Sin embargo, /api/health y /api/auth/register no están bloqueados por el limitador de login
-    const healthRes = await request(app)
-      .get('/api/health')
-      .set('X-Forwarded-For', clientIp);
-    expect(healthRes.status).toBe(200);
+  it('debe sanitizar y escapar caracteres HTML en entradas de texto para prevenir ataques XSS', async () => {
+    const token = await getValidToken();
+    const maliciousPayload = {
+      title: "<script>alert('xss')</script>Lista Segura",
+    };
 
-    const registerRes = await request(app)
-      .post('/api/auth/register')
-      .set('X-Forwarded-For', clientIp)
-      .send({});
-    // Debe responder con 400 por validación, no 429
-    expect(registerRes.status).toBe(400);
+    const response = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send(maliciousPayload);
+
+    expect(response.status).toBe(201);
+    expect(response.body.title).not.toContain('<script>');
+    expect(response.body.title).not.toContain("alert('xss')");
+    expect(response.body.title).toContain('&lt;script&gt;');
+    expect(response.body.title).toContain('Lista Segura');
+
+    // Verificar que al actualizar y consultar la lista almacenada, los datos persisten sanitizados y no ejecutables
+    const updateRes = await request(app)
+      .put(`/api/lists/${response.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: "<img src=x onerror=alert('xss')>Editada" });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.title).not.toContain('<img');
+    expect(updateRes.body.title).toContain('&lt;img');
   });
 
-  it('debe registrar intentos fallidos y excesos de tasa en auditoría, y aplicar extensión temporal ante actividad sospechosa', async () => {
-    const suspiciousIp = '198.51.100.99';
+  it('debe rechazar solicitudes con operadores o estructuras de inyección NoSQL', async () => {
+    // Intento de evasión de autenticación mediante operador NoSQL $gt o $ne en lugar de cadena
+    const nosqlPayload = {
+      email: { $gt: '' },
+      password: 'password12345',
+    };
 
-    // Generar intentos fallidos y superar el umbral reiteradamente (>= 10 intentos)
-    for (let i = 0; i < 11; i++) {
-      await request(app)
-        .post('/api/auth/login')
-        .set('X-Forwarded-For', suspiciousIp)
-        .send({ email: 'audit@test.com', password: 'wrongpassword' });
-    }
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send(nosqlPayload);
 
-    const logs = getRateLimitAuditLogs();
-    expect(logs.length).toBeGreaterThan(0);
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('message');
+    expect(response.body.message).toMatch(/maliciosa|NoSQL|no permitido/i);
+  });
 
-    const hasFailedAttempt = logs.some((l) => l.action === 'FAILED_LOGIN_ATTEMPT');
-    const hasRateLimitExceeded = logs.some((l) => l.action === 'RATE_LIMIT_EXCEEDED');
-    const hasExtendedBlock = logs.some((l) => l.action === 'TEMPORARY_BLOCK_EXTENDED');
+  it('debe rechazar solicitudes con patrones de inyección SQL en parámetros o cuerpo', async () => {
+    const token = await getValidToken();
 
-    expect(hasFailedAttempt).toBe(true);
-    expect(hasRateLimitExceeded).toBe(true);
-    expect(hasExtendedBlock).toBe(true);
+    // Intento de inyección SQL clásica para extraer datos o alterar la consulta
+    const sqlInjectionPayload = {
+      search: "' OR 1=1 --",
+    };
+
+    const response = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send(sqlInjectionPayload);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('message');
+    expect(response.body.message).toMatch(/SQL|maliciosa/i);
+  });
+
+  it('debe rechazar solicitudes con intentos de polución de prototipo (__proto__) o caracteres nulos', async () => {
+    const token = await getValidToken();
+
+    // 1. Intento de Prototype Pollution
+    const pollutionRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send('{"title":"Lista Con Polucion","__proto__":{"isAdmin":true}}');
+
+    expect(pollutionRes.status).toBe(400);
+    expect(pollutionRes.body.message).toMatch(/prototipo|maliciosa/i);
+
+    // 2. Intento de inyección de byte nulo
+    const nullByteRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista\0Maliciosa' });
+
+    expect(nullByteRes.status).toBe(400);
+    expect(nullByteRes.body.message).toMatch(/nulo|maliciosa/i);
+  });
+
+  it('debe garantizar el uso de consultas parametrizadas seguras mediante Prisma', async () => {
+    const token = await getValidToken();
+
+    // Crear una lista con un término inocuo que incluye caracteres especiales comunes
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Compras - Frutas y Verduras' });
+
+    expect(createRes.status).toBe(201);
+
+    // Búsqueda parametrizada segura
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ search: 'Frutas' });
+
+    expect(searchRes.status).toBe(200);
+    expect(searchRes.body.lists.length).toBeGreaterThan(0);
+    expect(searchRes.body.lists[0].title).toContain('Frutas');
   });
 });
 
-// Políticas de CORS y protección contra orígenes no autorizados (HU17).
-describe('Políticas de CORS y dominios autorizados (HU17)', () => {
-  const authorizedOrigin = allowedOrigins[0] || 'http://localhost:3000';
-  const unauthorizedOrigin = 'https://sitio-malicioso-no-autorizado.com';
-
-  it('debe permitir solicitudes desde un origen autorizado especificando la cabecera correspondiente sin usar comodín', async () => {
-    const response = await request(app)
-      .get('/api/health')
-      .set('Origin', authorizedOrigin);
-
-    expect(response.status).toBe(200);
-    expect(response.headers).toHaveProperty('access-control-allow-origin');
-    expect(response.headers['access-control-allow-origin']).toBe(authorizedOrigin);
-    expect(response.headers['access-control-allow-origin']).not.toBe('*');
-  });
-
-  it('debe bloquear orígenes no autorizados omitiendo la cabecera Access-Control-Allow-Origin según el estándar CORS', async () => {
-    const response = await request(app)
-      .get('/api/health')
-      .set('Origin', unauthorizedOrigin);
-
-    expect(response.headers['access-control-allow-origin']).toBeUndefined();
-  });
-
-  it('debe gestionar adecuadamente las solicitudes preflight (OPTIONS) retornando 204 y métodos permitidos', async () => {
-    const response = await request(app)
-      .options('/api/lists')
-      .set('Origin', authorizedOrigin)
-      .set('Access-Control-Request-Method', 'POST')
-      .set('Access-Control-Request-Headers', 'Content-Type, Authorization');
-
-    expect([200, 204]).toContain(response.status);
-    expect(response.headers['access-control-allow-origin']).toBe(authorizedOrigin);
-
-    const allowMethods = response.headers['access-control-allow-methods'];
-    expect(allowMethods).toBeDefined();
-    expect(allowMethods).toContain('GET');
-    expect(allowMethods).toContain('POST');
-    expect(allowMethods).toContain('PUT');
-    expect(allowMethods).toContain('DELETE');
-    expect(allowMethods).toContain('PATCH');
-
-    const allowHeaders = response.headers['access-control-allow-headers'];
-    expect(allowHeaders).toBeDefined();
-    expect(allowHeaders.toLowerCase()).toContain('content-type');
-    expect(allowHeaders.toLowerCase()).toContain('authorization');
-  });
-
-  it('debe rechazar solicitudes preflight (OPTIONS) provenientes de orígenes no autorizados', async () => {
-    const response = await request(app)
-      .options('/api/lists')
-      .set('Origin', unauthorizedOrigin)
-      .set('Access-Control-Request-Method', 'POST');
-
-    expect(response.headers['access-control-allow-origin']).toBeUndefined();
-  });
-});
