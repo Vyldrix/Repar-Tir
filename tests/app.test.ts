@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits, getRateLimitAuditLogs } from '../src/middlewares/rate-limit.middleware.js';
 import prisma from '../src/lib/prisma.js';
@@ -750,3 +751,60 @@ describe('Rate Limiting específico para inicio de sesión (HU18)', () => {
   });
 });
 
+// Políticas de CORS y protección contra orígenes no autorizados (HU17).
+describe('Políticas de CORS y dominios autorizados (HU17)', () => {
+  const authorizedOrigin = allowedOrigins[0] || 'http://localhost:3000';
+  const unauthorizedOrigin = 'https://sitio-malicioso-no-autorizado.com';
+
+  it('debe permitir solicitudes desde un origen autorizado especificando la cabecera correspondiente sin usar comodín', async () => {
+    const response = await request(app)
+      .get('/api/health')
+      .set('Origin', authorizedOrigin);
+
+    expect(response.status).toBe(200);
+    expect(response.headers).toHaveProperty('access-control-allow-origin');
+    expect(response.headers['access-control-allow-origin']).toBe(authorizedOrigin);
+    expect(response.headers['access-control-allow-origin']).not.toBe('*');
+  });
+
+  it('debe bloquear orígenes no autorizados omitiendo la cabecera Access-Control-Allow-Origin según el estándar CORS', async () => {
+    const response = await request(app)
+      .get('/api/health')
+      .set('Origin', unauthorizedOrigin);
+
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('debe gestionar adecuadamente las solicitudes preflight (OPTIONS) retornando 204 y métodos permitidos', async () => {
+    const response = await request(app)
+      .options('/api/lists')
+      .set('Origin', authorizedOrigin)
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'Content-Type, Authorization');
+
+    expect([200, 204]).toContain(response.status);
+    expect(response.headers['access-control-allow-origin']).toBe(authorizedOrigin);
+
+    const allowMethods = response.headers['access-control-allow-methods'];
+    expect(allowMethods).toBeDefined();
+    expect(allowMethods).toContain('GET');
+    expect(allowMethods).toContain('POST');
+    expect(allowMethods).toContain('PUT');
+    expect(allowMethods).toContain('DELETE');
+    expect(allowMethods).toContain('PATCH');
+
+    const allowHeaders = response.headers['access-control-allow-headers'];
+    expect(allowHeaders).toBeDefined();
+    expect(allowHeaders.toLowerCase()).toContain('content-type');
+    expect(allowHeaders.toLowerCase()).toContain('authorization');
+  });
+
+  it('debe rechazar solicitudes preflight (OPTIONS) provenientes de orígenes no autorizados', async () => {
+    const response = await request(app)
+      .options('/api/lists')
+      .set('Origin', unauthorizedOrigin)
+      .set('Access-Control-Request-Method', 'POST');
+
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+});
