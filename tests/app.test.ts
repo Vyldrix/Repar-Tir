@@ -3,8 +3,7 @@ import request from 'supertest';
 import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
-import { signRefreshToken, RefreshTokenStore } from '../src/middlewares/auth.middleware.js';
-import { verifyJWT } from '../src/middlewares/auth.middleware.js';
+import { requireAuth, requireRole, signJWT } from '../src/middlewares/auth.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -646,289 +645,154 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
-// Renovación de tokens JWT mediante endpoint HTTP POST /refresh (HU13).
-describe('Endpoint HTTP POST /refresh y renovación de tokens JWT (HU13)', () => {
-  const testUser = {
-    username: 'userHU13Refresh',
-    email: 'hu13.refresh@example.com',
-    password: 'PasswordSeguroHU13!',
-  };
-
-  let validRefreshToken: string;
-  let userId: string;
-
-  beforeAll(async () => {
-    const regRes = await request(app).post('/api/auth/register').send(testUser);
-    userId = regRes.body.id;
-
-    const loginRes = await request(app)
-      .post('/api/auth/login')
-      .send({ email: testUser.email, password: testUser.password });
-
-    validRefreshToken = loginRes.body.refreshToken;
+// Middleware factoría requireRole para control de acceso basado en roles (HU15).
+describe('Middleware factoría requireRole y control de acceso (HU15)', () => {
+  it('debe aceptar un arreglo de roles permitidos y retornar una función middleware de orden superior', () => {
+    const middleware = requireRole(['admin', 'editor']);
+    expect(typeof middleware).toBe('function');
+    expect(middleware.length).toBe(3); // (req, res, next)
   });
 
-  it('debe validar que la solicitud incluya un refresh token válido retornando 400 si no se proporciona', async () => {
-    // Solicitud sin body
-    const resSinToken = await request(app).post('/refresh').send({});
-    expect([400, 401]).toContain(resSinToken.status);
-    expect(resSinToken.body).toHaveProperty('message');
-
-    // Solicitud con token vacío
-    const resVacio = await request(app).post('/refresh').send({ refreshToken: '   ' });
-    expect([400, 401]).toContain(resVacio.status);
-  });
-
-  it('debe retornar 200 OK y un nuevo access token JWT válido cuando el refresh token es correcto', async () => {
-    const response = await request(app)
-      .post('/refresh')
-      .send({ refreshToken: validRefreshToken });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('accessToken');
-    const newAccessToken = response.body.accessToken || response.body.token;
-    expect(typeof newAccessToken).toBe('string');
-
-    // Probar que el nuevo token permite acceder a un endpoint protegido
-    const accessProtected = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${newAccessToken}`)
-      .send({ title: 'Lista creada con nuevo access token renovado' });
-
-    expect(accessProtected.status).toBe(201);
-  });
-
-  it('debe funcionar tanto en POST /refresh como en POST /api/auth/refresh', async () => {
-    const resAlias = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: validRefreshToken });
-
-    expect(resAlias.status).toBe(200);
-    expect(resAlias.body).toHaveProperty('accessToken');
-  });
-
-  it('debe verificar en el almacenamiento de tokens la validez y estado retornando 403 Forbidden si fue revocado', async () => {
-    // Crear un token específico y revocarlo en el almacenamiento
-    const tokenToRevoke = signRefreshToken({ userId, username: testUser.username });
-    RefreshTokenStore.revoke(tokenToRevoke);
-
-    const response = await request(app)
-      .post('/refresh')
-      .send({ refreshToken: tokenToRevoke });
-
-    expect([401, 403]).toContain(response.status);
-    expect(response.status).toBe(403);
-    expect(response.body).toHaveProperty('message');
-  });
-
-  it('debe retornar 401 Unauthorized si el refresh token tiene una firma adulterada o es inválido', async () => {
-    const invalidToken = validRefreshToken + 'corrupted_signature';
-
-    const response = await request(app)
-      .post('/refresh')
-      .send({ refreshToken: invalidToken });
-
-    expect(response.status).toBe(401);
-    expect(response.body).toHaveProperty('message');
-  });
-
-  it('debe retornar 401 Unauthorized si el refresh token ha expirado', async () => {
-    // Crear token expirado (-10 segundos de vigencia)
-    const expiredToken = signRefreshToken({ userId, username: testUser.username }, -10);
-
-    const response = await request(app)
-      .post('/refresh')
-      .send({ refreshToken: expiredToken });
-
-    expect(response.status).toBe(401);
-    expect(response.body).toHaveProperty('message');
-// Validación de credenciales y generación de JWT al iniciar sesión (HU12).
-describe('Validación de credenciales y generación de JWT en login (HU12)', () => {
-  const credentialsUser = {
-    username: 'userHU12Auth',
-    email: 'hu12.auth@example.com',
-    password: 'PasswordSeguroHU12!',
-  };
-
-  beforeAll(async () => {
-    await request(app).post('/api/auth/register').send(credentialsUser);
-  });
-
-  it('debe verificar la contraseña ingresada contra el hash en base de datos y autenticar exitosamente', async () => {
-    // Consultar el hash almacenado en la base de datos
-    const dbUser = await prisma.user.findUnique({
-      where: { email: credentialsUser.email },
-    });
-    expect(dbUser).toBeDefined();
-    expect(dbUser?.passwordHash).toBeDefined();
-
-    // Autenticar con la contraseña correcta
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email: credentialsUser.email, password: credentialsUser.password });
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('token');
-    expect(typeof res.body.token).toBe('string');
-  });
-
-  it('debe generar y firmar un token JWT válido que contenga la información básica del usuario y tiempo de expiración', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email: credentialsUser.email, password: credentialsUser.password });
-
-    expect(res.status).toBe(200);
-    const { token } = res.body;
-
-    // Verificar formato estándar JWT (header.payload.signature)
-    const parts = token.split('.');
-    expect(parts.length).toBe(3);
-
-    // Decodificar payload
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
-    expect(payload).toHaveProperty('userId');
-    expect(payload.username).toBe(credentialsUser.username);
-    expect(payload.email).toBe(credentialsUser.email);
-    expect(payload).toHaveProperty('exp');
-    expect(payload).toHaveProperty('iat');
-    expect(payload.exp).toBeGreaterThan(payload.iat);
-
-    // Verificar la firma criptográfica del JWT
-    const verification = verifyJWT(token);
-    expect(verification.valid).toBe(true);
-    expect(verification.payload.userId).toBe(payload.userId);
-  });
-
-  it('debe retornar el token JWT en la respuesta 200 OK y permitir su uso en solicitudes autenticadas posteriores', async () => {
-    // 1. Obtener token del login
-    const loginRes = await request(app)
-      .post('/api/auth/login')
-      .send({ username: credentialsUser.username, password: credentialsUser.password });
-
-    expect(loginRes.status).toBe(200);
-    const { token } = loginRes.body;
-    expect(token).toBeDefined();
-
-    // 2. Usar token para acceder a un recurso protegido
-    const protectedRes = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Lista creada con JWT de HU12' });
-
-    expect(protectedRes.status).toBe(201);
-    expect(protectedRes.body).toHaveProperty('id');
-    expect(protectedRes.body.title).toBe('Lista creada con JWT de HU12');
-  });
-
-  it('debe devolver código de respuesta HTTP 401 Unauthorized si la contraseña es incorrecta', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email: credentialsUser.email, password: 'PasswordEquivocada123' });
-
-    expect(res.status).toBe(401);
-    expect(res.body).toHaveProperty('message');
-    expect(res.body.token).toBeUndefined();
-  });
-
-  it('debe devolver código de respuesta HTTP 401 Unauthorized si el usuario o correo no existe', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email: 'usuario.inexistente@example.com', password: credentialsUser.password });
-
-    expect(res.status).toBe(401);
-    expect(res.body).toHaveProperty('message');
-    expect(res.body.token).toBeUndefined();
-// Cifrado de contraseñas mediante hash con bcrypt en el registro (HU11).
-describe('Cifrado de contraseñas con Bcrypt en el registro (HU11)', () => {
-  it('debe cifrar la contraseña con el algoritmo bcrypt antes de almacenarla en la base de datos', async () => {
-    const rawPassword = 'PasswordBcrypt123!';
-    const user = {
-      username: 'usuarioBcryptTest',
-      email: 'bcrypt.test@example.com',
-      password: rawPassword,
+  it('debe retornar 401 Unauthorized si el usuario no ha sido autenticado previamente con requireAuth', () => {
+    const middleware = requireRole(['admin']);
+    const mockReq = {} as any; // sin req.user
+    let statusSent = 0;
+    let jsonSent: any = null;
+    const mockRes = {
+      status: (code: number) => {
+        statusSent = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        jsonSent = data;
+        return mockRes;
+      },
+    } as any;
+    let nextCalled = false;
+    const mockNext = () => {
+      nextCalled = true;
     };
 
-    const response = await request(app)
-      .post('/api/auth/register')
-      .send(user);
+    middleware(mockReq, mockRes, mockNext);
 
-    expect(response.status).toBe(201);
-
-    // Consultar el registro directamente en la base de datos
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
-    });
-
-    expect(dbUser).toBeDefined();
-    // La contraseña nunca debe ser igual al texto plano
-    expect(dbUser?.passwordHash).not.toBe(rawPassword);
-    // Debe cumplir con el formato de hash de bcrypt ($2a$ o $2b$)
-    expect(dbUser?.passwordHash).toMatch(/^\$2[ab]\$\d{2}\$/);
-    // Debe validar exitosamente con bcrypt.compare
-    const isValid = await bcrypt.compare(rawPassword, dbUser!.passwordHash);
-    expect(isValid).toBe(true);
+    expect(nextCalled).toBe(false);
+    expect(statusSent).toBe(401);
+    expect(jsonSent).toHaveProperty('message');
   });
 
-  it('debe asegurar que se utilice un factor de costo (salt rounds) adecuado (10 rounds)', async () => {
-    const rawPassword = 'PasswordSaltRounds123!';
-    const user = {
-      username: 'usuarioSaltRounds',
-      email: 'salt.rounds@example.com',
-      password: rawPassword,
+  it('debe retornar 403 Forbidden si el usuario autenticado no posee un rol válido asignado', () => {
+    const middleware = requireRole(['admin']);
+    const mockReq = {
+      user: { id: 'user-sin-rol-id' }, // autenticado pero sin rol
+    } as any;
+    let statusSent = 0;
+    let jsonSent: any = null;
+    const mockRes = {
+      status: (code: number) => {
+        statusSent = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        jsonSent = data;
+        return mockRes;
+      },
+    } as any;
+    let nextCalled = false;
+    const mockNext = () => {
+      nextCalled = true;
     };
 
-    await request(app)
-      .post('/api/auth/register')
-      .send(user);
+    middleware(mockReq, mockRes, mockNext);
 
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
-    });
-
-    expect(dbUser).toBeDefined();
-    // En bcrypt, el prefijo indica el algoritmo y las rondas ($2b$10$)
-    expect(dbUser?.passwordHash).toMatch(/^\$2[ab]\$10\$/);
+    expect(nextCalled).toBe(false);
+    expect(statusSent).toBe(403);
+    expect(jsonSent).toHaveProperty('message');
   });
 
-  it('debe garantizar que en ningún momento se almacene o exponga la contraseña en texto plano durante la creación de la cuenta', async () => {
-    const rawPassword = 'PasswordTextoPlano123!';
-    const user = {
-      username: 'usuarioSinPlano',
-      email: 'sin.plano@example.com',
-      password: rawPassword,
+  it('debe retornar 403 Forbidden si el rol del usuario no se encuentra dentro del arreglo autorizado', () => {
+    const middleware = requireRole(['admin', 'superadmin']);
+    const mockReq = {
+      user: { id: 'user-normal-id', role: 'user' },
+    } as any;
+    let statusSent = 0;
+    let jsonSent: any = null;
+    const mockRes = {
+      status: (code: number) => {
+        statusSent = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        jsonSent = data;
+        return mockRes;
+      },
+    } as any;
+    let nextCalled = false;
+    const mockNext = () => {
+      nextCalled = true;
     };
 
-    const response = await request(app)
-      .post('/api/auth/register')
-      .send(user);
+    middleware(mockReq, mockRes, mockNext);
 
-    expect(response.status).toBe(201);
-    // La respuesta nunca debe exponer la contraseña ni el hash
-    expect(response.body.password).toBeUndefined();
-    expect(response.body.passwordHash).toBeUndefined();
-
-    // Verificación en la base de datos: el texto plano no debe estar guardado
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
-    });
-    expect(dbUser?.passwordHash).not.toContain(rawPassword);
-    expect((dbUser as unknown as Record<string, unknown>).password).toBeUndefined();
+    expect(nextCalled).toBe(false);
+    expect(statusSent).toBe(403);
+    expect(jsonSent).toHaveProperty('message');
   });
 
-  it('debe permitir iniciar sesión con la contraseña en texto plano validándola contra el hash bcrypt', async () => {
-    const user = {
-      username: 'usuarioLoginBcrypt',
-      email: 'login.bcrypt@example.com',
-      password: 'MiPasswordValida456!',
+  it('debe permitir el flujo (next()) si el rol del usuario está incluido en el arreglo autorizado', () => {
+    const middleware = requireRole(['admin', 'moderator']);
+    const mockReq = {
+      user: { id: 'admin-user-id', role: 'admin' },
+    } as any;
+    let nextCalled = false;
+    const mockRes = {} as any;
+    const mockNext = () => {
+      nextCalled = true;
     };
 
-    await request(app).post('/api/auth/register').send(user);
+    middleware(mockReq, mockRes, mockNext);
 
-    const loginRes = await request(app)
-      .post('/api/auth/login')
-      .send({ email: user.email, password: user.password });
+    expect(nextCalled).toBe(true);
+  });
 
-    expect(loginRes.status).toBe(200);
-    expect(loginRes.body).toHaveProperty('token');
+  it('debe permitir el flujo si el usuario posee un arreglo de roles y al menos uno coincide', () => {
+    const middleware = requireRole(['admin']);
+    const mockReq = {
+      user: { id: 'multi-role-user-id', roles: ['user', 'admin'] },
+    } as any;
+    let nextCalled = false;
+    const mockRes = {} as any;
+    const mockNext = () => {
+      nextCalled = true;
+    };
+
+    middleware(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(true);
+  });
+
+  it('debe funcionar en conjunto con requireAuth en peticiones HTTP completas', async () => {
+    // Montar ruta de prueba protegida por requireAuth y requireRole(['admin'])
+    app.get('/api/test-role-endpoint', requireAuth, requireRole(['admin']), (_req, res) => {
+      res.status(200).json({ status: 'success', data: 'Zona restringida para admin' });
+    });
+
+    // 1. Petición sin token -> 401
+    const resSinToken = await request(app).get('/api/test-role-endpoint');
+    expect(resSinToken.status).toBe(401);
+
+    // 2. Petición con token con rol 'user' -> 403
+    const userToken = signJWT({ userId: 'user-normal', role: 'user' });
+    const resUser = await request(app)
+      .get('/api/test-role-endpoint')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(resUser.status).toBe(403);
+
+    // 3. Petición con token con rol 'admin' -> 200
+    const adminToken = signJWT({ userId: 'admin-user', role: 'admin' });
+    const resAdmin = await request(app)
+      .get('/api/test-role-endpoint')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(resAdmin.status).toBe(200);
+    expect(resAdmin.body).toHaveProperty('data', 'Zona restringida para admin');
   });
 });

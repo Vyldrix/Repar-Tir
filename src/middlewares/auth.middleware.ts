@@ -209,3 +209,55 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
 // Alias para compatibilidad con código existente
 export const authenticateToken = requireAuth;
+
+/**
+ * =========================================================================
+ * Middleware factoría requireRole (HU #15):
+ * Función de orden superior que acepta un arreglo de roles permitidos y
+ * retorna un middleware que:
+ * 1. Verifica autenticación previa (requireAuth) comprobando req.user.
+ * 2. Comprueba que el usuario cuente con un rol válido (sesión o token JWT).
+ * 3. Permite el flujo (next()) si el rol está incluido en rolesArray.
+ * 4. Retorna código HTTP 403 Forbidden si no posee los permisos o rol requerido.
+ * =========================================================================
+ */
+export function requireRole(rolesArray: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as any).user;
+
+    // 1. Verificar autenticación previa (mediante requireAuth)
+    if (!user) {
+      res.status(401).json({
+        message: 'No autorizado: se requiere autenticación previa con requireAuth',
+      });
+      return;
+    }
+
+    // 2. Extraer rol o roles asignados al usuario en su sesión o token
+    const userRole = user.role || user.roles;
+
+    // Si el usuario no cuenta con un rol definido
+    if (!userRole) {
+      res.status(403).json({
+        message: 'Acceso denegado: el usuario no posee un rol válido asignado',
+      });
+      return;
+    }
+
+    // 3. Comprobar si el rol del usuario se encuentra en el arreglo de roles permitidos
+    const allowedRoles = Array.isArray(rolesArray) ? rolesArray : [rolesArray];
+    const hasRole = Array.isArray(userRole)
+      ? userRole.some((role: string) => allowedRoles.includes(role))
+      : allowedRoles.includes(userRole);
+
+    if (!hasRole) {
+      res.status(403).json({
+        message: 'Acceso denegado: no posee los permisos o el rol necesario para realizar esta acción',
+      });
+      return;
+    }
+
+    // 4. Si el rol es autorizado, continuar al siguiente middleware / controlador
+    next();
+  };
+}
