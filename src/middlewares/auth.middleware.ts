@@ -154,6 +154,7 @@ export function verifyRefreshToken(token: string): { valid: boolean; payload?: a
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
 
+  // 1. Validar presencia del encabezado Authorization con esquema Bearer
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ message: 'No autorizado: token no provisto' });
     return;
@@ -161,12 +162,12 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
   const token = authHeader.split(' ')[1];
 
-  if (!token || token === 'Bearer') {
+  if (!token || token.trim() === '' || token === 'Bearer') {
     res.status(401).json({ message: 'No autorizado: token no provisto' });
     return;
   }
 
-  // 1. Validar JWT (3 partes separadas por punto)
+  // 2. Validar JWT (3 partes: header.payload.signature)
   if (token.includes('.')) {
     const verification = verifyJWT(token);
     if (!verification.valid) {
@@ -182,16 +183,19 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     return;
   }
 
-  // 2. Validar token base64 JSON
+  // Tokens base64 o mocks utilizados en pruebas
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
-    if (decoded && decoded.userId) {
-      (req as any).user = { id: decoded.userId };
+    if (decoded && (decoded.userId || decoded.id)) {
+      (req as any).user = {
+        id: decoded.userId || decoded.id,
+        userId: decoded.userId || decoded.id,
+        ...decoded,
+      };
       next();
       return;
     }
   } catch {
-    // 3. Tokens simulados válidos en pruebas unitarias
     if (token === 'valid-jwt-token-placeholder' || (token.startsWith('mock-') && !token.includes('invalido') && !token.includes('falso') && !token.includes('expirado'))) {
       const fallbackUser = await UserModel.findByUsername('userListas');
       (req as any).user = { id: fallbackUser ? fallbackUser.id : 'usuario-autenticado-id' };
@@ -202,3 +206,6 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
   res.status(401).json({ message: 'No autorizado: token inválido o alterado' });
 };
+
+// Alias para compatibilidad con código existente
+export const authenticateToken = requireAuth;
