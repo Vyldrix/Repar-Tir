@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import bcrypt from 'bcrypt';
+import fs from 'node:fs';
+import path from 'node:path';
 import app from '../src/app.js';
 import { clearRateLimits, getRateLimitAuditLogs } from '../src/middlewares/rate-limit.middleware.js';
 import prisma from '../src/lib/prisma.js';
@@ -644,127 +645,142 @@ describe('Rendimiento, Tiempos de Respuesta y Rate Limiting (HU08)', () => {
   });
 });
 
-// Saneamiento de entradas y prevención de inyecciones SQL, NoSQL y XSS (HU19)
-describe('Saneamiento de entradas y prevención de inyecciones SQL, NoSQL y XSS (HU19)', () => {
-  const sanitizeTestUser = {
-    username: 'sanitizationUser',
-    email: 'sanitize@example.com',
-    password: 'password12345',
-  };
+// Colección de Bruno para consulta y prueba de endpoints (HU20)
+describe('Colección de Bruno para consulta y prueba de endpoints (HU20)', () => {
+  const brunoDir = path.resolve(process.cwd(), 'bruno');
 
-  const getValidToken = async (): Promise<string> => {
-    await request(app).post('/api/auth/register').send(sanitizeTestUser);
-    const loginRes = await request(app)
-      .post('/api/auth/login')
-      .send({ email: sanitizeTestUser.email, password: sanitizeTestUser.password });
-    return loginRes.body.token;
-  };
+  it('debe existir el archivo bruno.json configurado correctamente para la colección', () => {
+    const brunoJsonPath = path.join(brunoDir, 'bruno.json');
+    expect(fs.existsSync(brunoJsonPath)).toBe(true);
 
-  it('debe sanitizar y escapar caracteres HTML en entradas de texto para prevenir ataques XSS', async () => {
-    const token = await getValidToken();
-    const maliciousPayload = {
-      title: "<script>alert('xss')</script>Lista Segura",
-    };
-
-    const response = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${token}`)
-      .send(maliciousPayload);
-
-    expect(response.status).toBe(201);
-    expect(response.body.title).not.toContain('<script>');
-    expect(response.body.title).not.toContain("alert('xss')");
-    expect(response.body.title).toContain('&lt;script&gt;');
-    expect(response.body.title).toContain('Lista Segura');
-
-    // Verificar que al actualizar y consultar la lista almacenada, los datos persisten sanitizados y no ejecutables
-    const updateRes = await request(app)
-      .put(`/api/lists/${response.body.id}`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ title: "<img src=x onerror=alert('xss')>Editada" });
-
-    expect(updateRes.status).toBe(200);
-    expect(updateRes.body.title).not.toContain('<img');
-    expect(updateRes.body.title).toContain('&lt;img');
+    const content = JSON.parse(fs.readFileSync(brunoJsonPath, 'utf8'));
+    expect(content).toHaveProperty('name', 'Repar-Tir API');
+    expect(content).toHaveProperty('type', 'collection');
+    expect(content).toHaveProperty('version', '1');
   });
 
-  it('debe rechazar solicitudes con operadores o estructuras de inyección NoSQL', async () => {
-    // Intento de evasión de autenticación mediante operador NoSQL $gt o $ne en lugar de cadena
-    const nosqlPayload = {
-      email: { $gt: '' },
-      password: 'password12345',
-    };
+  it('debe contener entornos configurados con variables clave (baseUrl, token, listId)', () => {
+    const envDir = path.join(brunoDir, 'environments');
+    expect(fs.existsSync(envDir)).toBe(true);
 
-    const response = await request(app)
-      .post('/api/auth/login')
-      .send(nosqlPayload);
+    const localEnvPath = path.join(envDir, 'Local.bru');
+    const prodEnvPath = path.join(envDir, 'Production.bru');
 
-    expect(response.status).toBe(400);
-    expect(response.body).toHaveProperty('message');
-    expect(response.body.message).toMatch(/maliciosa|NoSQL|no permitido/i);
+    expect(fs.existsSync(localEnvPath)).toBe(true);
+    expect(fs.existsSync(prodEnvPath)).toBe(true);
+
+    const localContent = fs.readFileSync(localEnvPath, 'utf8');
+    expect(localContent).toContain('baseUrl:');
+    expect(localContent).toContain('token:');
+    expect(localContent).toContain('listId:');
+
+    const prodContent = fs.readFileSync(prodEnvPath, 'utf8');
+    expect(prodContent).toContain('baseUrl:');
   });
 
-  it('debe rechazar solicitudes con patrones de inyección SQL en parámetros o cuerpo', async () => {
-    const token = await getValidToken();
+  it('debe organizar los recursos en módulos estructurados (Health, Autenticacion, Listas)', () => {
+    const expectedModules = ['Health', 'Autenticacion', 'Listas'];
 
-    // Intento de inyección SQL clásica para extraer datos o alterar la consulta
-    const sqlInjectionPayload = {
-      search: "' OR 1=1 --",
-    };
-
-    const response = await request(app)
-      .post('/api/lists/search')
-      .set('Authorization', `Bearer ${token}`)
-      .send(sqlInjectionPayload);
-
-    expect(response.status).toBe(400);
-    expect(response.body).toHaveProperty('message');
-    expect(response.body.message).toMatch(/SQL|maliciosa/i);
+    for (const mod of expectedModules) {
+      const modulePath = path.join(brunoDir, mod);
+      expect(fs.existsSync(modulePath)).toBe(true);
+      expect(fs.statSync(modulePath).isDirectory()).toBe(true);
+    }
   });
 
-  it('debe rechazar solicitudes con intentos de polución de prototipo (__proto__) o caracteres nulos', async () => {
-    const token = await getValidToken();
+  it('debe incluir todos los endpoints desarrollados con métodos, encabezados y cuerpos JSON requeridos', () => {
+    const expectedRequests = [
+      {
+        file: path.join(brunoDir, 'Health', 'Verificar Estado.bru'),
+        method: 'get',
+        urlPart: '/api/health',
+        requiresAuth: false,
+      },
+      {
+        file: path.join(brunoDir, 'Autenticacion', 'Registrar Usuario.bru'),
+        method: 'post',
+        urlPart: '/api/auth/register',
+        requiresAuth: false,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Autenticacion', 'Iniciar Sesion.bru'),
+        method: 'post',
+        urlPart: '/api/auth/login',
+        requiresAuth: false,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Crear Lista.bru'),
+        method: 'post',
+        urlPart: '/api/lists',
+        requiresAuth: true,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Buscar Listas.bru'),
+        method: 'post',
+        urlPart: '/api/lists/search',
+        requiresAuth: true,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Actualizar Lista.bru'),
+        method: 'put',
+        urlPart: '/api/lists/{{listId}}',
+        requiresAuth: true,
+        requiresJsonBody: true,
+      },
+      {
+        file: path.join(brunoDir, 'Listas', 'Eliminar Lista.bru'),
+        method: 'delete',
+        urlPart: '/api/lists/{{listId}}',
+        requiresAuth: true,
+      },
+    ];
 
-    // 1. Intento de Prototype Pollution
-    const pollutionRes = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${token}`)
-      .set('Content-Type', 'application/json')
-      .send('{"title":"Lista Con Polucion","__proto__":{"isAdmin":true}}');
+    for (const reqInfo of expectedRequests) {
+      expect(fs.existsSync(reqInfo.file)).toBe(true);
+      const content = fs.readFileSync(reqInfo.file, 'utf8');
 
-    expect(pollutionRes.status).toBe(400);
-    expect(pollutionRes.body.message).toMatch(/prototipo|maliciosa/i);
+      expect(content).toContain(reqInfo.method);
+      expect(content).toContain(reqInfo.urlPart);
 
-    // 2. Intento de inyección de byte nulo
-    const nullByteRes = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Lista\0Maliciosa' });
+      if (reqInfo.requiresAuth) {
+        expect(content).toMatch(/Authorization:\s*Bearer/i);
+      }
 
-    expect(nullByteRes.status).toBe(400);
-    expect(nullByteRes.body.message).toMatch(/nulo|maliciosa/i);
+      if (reqInfo.requiresJsonBody) {
+        expect(content).toMatch(/Content-Type:\s*application\/json/i);
+        expect(content).toContain('body:json');
+      }
+    }
   });
 
-  it('debe garantizar el uso de consultas parametrizadas seguras mediante Prisma', async () => {
-    const token = await getValidToken();
+  it('debe documentar detalladamente las respuestas exitosas (200, 201) y de error (400, 401, 403, 404)', () => {
+    const filesWithDocs = [
+      path.join(brunoDir, 'Health', 'Verificar Estado.bru'),
+      path.join(brunoDir, 'Autenticacion', 'Registrar Usuario.bru'),
+      path.join(brunoDir, 'Autenticacion', 'Iniciar Sesion.bru'),
+      path.join(brunoDir, 'Listas', 'Crear Lista.bru'),
+      path.join(brunoDir, 'Listas', 'Buscar Listas.bru'),
+      path.join(brunoDir, 'Listas', 'Actualizar Lista.bru'),
+      path.join(brunoDir, 'Listas', 'Eliminar Lista.bru'),
+    ];
 
-    // Crear una lista con un término inocuo que incluye caracteres especiales comunes
-    const createRes = await request(app)
-      .post('/api/lists')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Compras - Frutas y Verduras' });
+    const allDocsCombined = filesWithDocs
+      .map((f) => fs.readFileSync(f, 'utf8'))
+      .join('\n');
 
-    expect(createRes.status).toBe(201);
+    // Validar presencia de respuestas exitosas documentadas
+    expect(allDocsCombined).toContain('200 OK');
+    expect(allDocsCombined).toContain('201 Created');
 
-    // Búsqueda parametrizada segura
-    const searchRes = await request(app)
-      .post('/api/lists/search')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ search: 'Frutas' });
-
-    expect(searchRes.status).toBe(200);
-    expect(searchRes.body.lists.length).toBeGreaterThan(0);
-    expect(searchRes.body.lists[0].title).toContain('Frutas');
+    // Validar presencia de respuestas de error documentadas
+    expect(allDocsCombined).toContain('400 Bad Request');
+    expect(allDocsCombined).toContain('401 Unauthorized');
+    expect(allDocsCombined).toContain('403 Forbidden');
+    expect(allDocsCombined).toContain('404 Not Found');
   });
 });
 

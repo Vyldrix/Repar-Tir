@@ -1,0 +1,71 @@
+meta {
+  name: Buscar Listas
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/lists/search
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "search": "Compras",
+    "page": 1,
+    "limit": 10
+  }
+}
+
+docs {
+  # Buscar y Consultar Listas
+  Consulta, filtra y pagina las listas pertenecientes únicamente al usuario autenticado.
+
+  ### Encabezados
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <token_jwt>` (requerido)
+
+  ### Cuerpo de la Petición (JSON)
+  - `search` (string, opcional): Texto a buscar dentro del título de las listas.
+  - `page` (number, opcional, por defecto 1): Número de página (entero > 0).
+  - `limit` (number, opcional, por defecto 10): Cantidad de elementos por página (entero > 0).
+
+  ### Respuestas Esperadas:
+  - **200 OK**: Retorna el arreglo de listas coincidentes y metadata de paginación.
+    ```json
+    {
+      "lists": [
+        {
+          "id": "e4f5a6b7-8901-2345-6789-abcdef012345",
+          "title": "Lista de Compras Mensual",
+          "userId": "c7b3d8e0-1234-5678-90ab-cdef12345678",
+          "createdAt": "2026-10-04T20:10:00.000Z",
+          "updatedAt": "2026-10-04T20:10:00.000Z"
+        }
+      ],
+      "pagination": {
+        "total": 1,
+        "page": 1,
+        "limit": 10
+      }
+    }
+    ```
+  - **400 Bad Request**: Parámetros `page` o `limit` no son enteros mayores a 0.
+    ```json
+    {
+      "message": "El parámetro page debe ser un número entero mayor a 0"
+    }
+    ```
+  - **401 Unauthorized**: Solicitud sin token o con token inválido.
+    ```json
+    {
+      "message": "Acceso denegado: Token no proporcionado o inválido"
+    }
+    ```
+}

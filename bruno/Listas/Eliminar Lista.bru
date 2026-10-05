@@ -1,0 +1,52 @@
+meta {
+  name: Eliminar Lista
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/lists/{{listId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+docs {
+  # Eliminar Lista
+  Elimina de forma permanente una lista identificada por su ID. Comprueba que el usuario solicitante sea el dueño de la lista antes de proceder.
+
+  ### Parámetros de Ruta
+  - `id`: Identificador único de la lista (`{{listId}}`).
+
+  ### Encabezados
+  - `Authorization: Bearer <token_jwt>` (requerido)
+
+  ### Respuestas Esperadas:
+  - **200 OK**: Eliminación completada con éxito.
+    ```json
+    {
+      "message": "Lista eliminada correctamente"
+    }
+    ```
+  - **401 Unauthorized**: No autenticado o token inválido.
+    ```json
+    {
+      "message": "Acceso denegado: Token no proporcionado o inválido"
+    }
+    ```
+  - **403 Forbidden**: La lista no pertenece al usuario autenticado.
+    ```json
+    {
+      "message": "No tienes permiso para eliminar esta lista"
+    }
+    ```
+  - **404 Not Found**: La lista no existe o ya fue eliminada previamente.
+    ```json
+    {
+      "message": "Lista no encontrada"
+    }
+    ```
+}
