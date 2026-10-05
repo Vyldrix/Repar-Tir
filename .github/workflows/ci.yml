@@ -11,12 +11,43 @@ on:
       - develop
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate-and-test:
-    name: Lint, Test y Build (Node ${{ matrix.node-version }})
+  code-quality:
+    name: 🧹 Calidad y Tipos (ESLint & TypeScript)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 💎 Generar cliente de Prisma
+        run: npm run prisma:generate
+
+      - name: 🧹 Análisis estático de código (ESLint)
+        run: npm run lint
+
+      - name: 🔍 Verificación estática de tipos (Typecheck)
+        run: npm run typecheck
+
+  test:
+    name: 🧪 Pruebas y Cobertura (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         node-version: [20.x, 22.x]
 
@@ -33,19 +64,50 @@ jobs:
       - name: 📦 Instalar dependencias
         run: npm ci
 
-      - name: 🔍 Verificación de tipos TypeScript (Typecheck)
-        run: npm run typecheck
+      - name: 💎 Generar cliente de Prisma
+        run: npm run prisma:generate
 
-      - name: 🧹 Análisis estático y calidad de código (ESLint)
-        run: npm run lint
+      - name: 🗄️ Preparar base de datos para pruebas (Migraciones)
+        run: npm run prisma:deploy
+        env:
+          DATABASE_URL: "file:./ci.db"
 
-      - name: 🧪 Ejecución de pruebas unitarias e integración con cobertura
+      - name: 🧪 Ejecutar pruebas automatizadas con cobertura
         run: npm run test:coverage
         env:
           NODE_ENV: test
           PORT: 3000
+          DATABASE_URL: "file:./ci.db"
+          JWT_SECRET: "ci-secret-jwt-key-super-secure"
+          REFRESH_TOKEN_SECRET: "ci-secret-refresh-key-super-secure"
 
-      - name: 🏗️ Compilación y empaquetado (Build)
+      - name: 📊 Subir reporte de cobertura como artefacto (Node 20.x)
+        if: matrix.node-version == '20.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: 🏗️ Compilación y Empaquetado
+    needs: [code-quality, test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 🏗️ Compilar aplicación (TypeScript a dist/)
         run: npm run build
 
       - name: 📋 Publicar resumen del Pipeline en el Job Summary
@@ -53,8 +115,13 @@ jobs:
         run: |
           echo "### 🚀 Resumen de CI - Repar-Tir Backend" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Estado del Job:** ${{ job.status == 'success' && '✅ Exitoso' || '❌ Fallido' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Versión de Node:** ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Estado del Pipeline:** ${{ job.status == 'success' && '✅ Exitoso' || '❌ Fallido' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Evento disparador:** \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Rama / Ref:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Verificaciones completadas:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧹 Linting y Typechecking estricto con TypeScript" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 Pruebas unitarias e integración en Node.js 20.x y 22.x" >> $GITHUB_STEP_SUMMARY
+          echo "- 🗄️ Migraciones automáticas de SQLite (Prisma)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🏗️ Compilación y empaquetado de distribución (dist/)" >> $GITHUB_STEP_SUMMARY

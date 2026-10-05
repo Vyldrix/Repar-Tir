@@ -3,7 +3,7 @@ import request from 'supertest';
 import fs from 'node:fs';
 import path from 'node:path';
 import app from '../src/app.js';
-import { clearRateLimits, getRateLimitAuditLogs } from '../src/middlewares/rate-limit.middleware.js';
+import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
