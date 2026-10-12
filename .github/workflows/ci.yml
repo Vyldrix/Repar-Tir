@@ -125,7 +125,7 @@ jobs:
 
   deploy-to-render:
     name: 🚀 Despliegue Automático en Render
-    needs: validate-and-test
+    needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 

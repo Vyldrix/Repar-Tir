@@ -820,7 +820,7 @@ describe('Configuración y Despliegue Automático en Render (HU21)', () => {
 
     const content = fs.readFileSync(ciPath, 'utf8');
     expect(content).toContain('deploy-to-render:');
-    expect(content).toContain('needs: validate-and-test');
+    expect(content).toContain('needs: build');
     expect(content).toContain("refs/heads/main");
     expect(content).toContain('secrets.RENDER_DEPLOY_HOOK_URL');
   });
