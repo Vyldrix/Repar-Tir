@@ -3,7 +3,7 @@ import request from 'supertest';
 import fs from 'node:fs';
 import path from 'node:path';
 import app from '../src/app.js';
-import { clearRateLimits, getRateLimitAuditLogs } from '../src/middlewares/rate-limit.middleware.js';
+import { clearRateLimits } from '../src/middlewares/rate-limit.middleware.js';
 import prisma from '../src/lib/prisma.js';
 
 beforeAll(async () => {
@@ -783,4 +783,58 @@ describe('Colección de Bruno para consulta y prueba de endpoints (HU20)', () =>
     expect(allDocsCombined).toContain('404 Not Found');
   });
 });
+
+// Configuración y Despliegue Automático en Render (HU21)
+describe('Configuración y Despliegue Automático en Render (HU21)', () => {
+  const rootDir = process.cwd();
+
+  it('debe existir el archivo render.yaml con la especificación de servicio, build y start commands', () => {
+    const renderYamlPath = path.join(rootDir, 'render.yaml');
+    expect(fs.existsSync(renderYamlPath)).toBe(true);
+
+    const content = fs.readFileSync(renderYamlPath, 'utf8');
+    expect(content).toContain('type: web');
+    expect(content).toContain('name: repar-tir-backend');
+    expect(content).toContain('buildCommand:');
+    expect(content).toContain('npm run build');
+    expect(content).toContain('startCommand: npm start');
+    expect(content).toContain('healthCheckPath: /api/health');
+    expect(content).toContain('autoDeploy: true');
+  });
+
+  it('debe declarar variables de entorno sensibles sin exponer valores en el código (sync: false)', () => {
+    const renderYamlPath = path.join(rootDir, 'render.yaml');
+    const content = fs.readFileSync(renderYamlPath, 'utf8');
+
+    expect(content).toContain('DATABASE_URL');
+    expect(content).toContain('JWT_SECRET');
+    expect(content).toContain('sync: false');
+
+    // Garantizar que no se expongan contraseñas ni secretos hardcodeados
+    expect(content).not.toMatch(/JWT_SECRET:\s*["'][a-zA-Z0-9_-]{10,}["']/);
+  });
+
+  it('debe configurar el pipeline de CI/CD en GitHub Actions con el job de despliegue dependiente de pruebas y filtrado por rama main', () => {
+    const ciPath = path.join(rootDir, '.github', 'workflows', 'ci.yml');
+    expect(fs.existsSync(ciPath)).toBe(true);
+
+    const content = fs.readFileSync(ciPath, 'utf8');
+    expect(content).toContain('deploy-to-render:');
+    expect(content).toContain('needs: validate-and-test');
+    expect(content).toContain("refs/heads/main");
+    expect(content).toContain('secrets.RENDER_DEPLOY_HOOK_URL');
+  });
+
+  it('debe documentar adecuadamente las variables de entorno requeridas en .env.example sin exponer credenciales', () => {
+    const envExamplePath = path.join(rootDir, '.env.example');
+    expect(fs.existsSync(envExamplePath)).toBe(true);
+
+    const content = fs.readFileSync(envExamplePath, 'utf8');
+    expect(content).toContain('PORT=');
+    expect(content).toContain('NODE_ENV=');
+    expect(content).toContain('DATABASE_URL=');
+    expect(content).toContain('JWT_SECRET=');
+  });
+});
+
 
