@@ -5,7 +5,7 @@ services:
     plan: free
     region: oregon
     branch: main
-    buildCommand: npm install && npm run build && npm run prisma:deploy
+    buildCommand: npm install --include=dev && npm run build && npm run prisma:deploy
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
