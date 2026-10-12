@@ -58,3 +58,44 @@ jobs:
           echo "- **Evento disparador:** \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Rama / Ref:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy-to-render:
+    name: 🚀 Despliegue Automático en Render
+    needs: validate-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🌐 Disparar Deploy Hook de Render
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "⚠️ Advertencia: El secreto RENDER_DEPLOY_HOOK_URL no está configurado en GitHub Secrets."
+            echo "ℹ️ Para habilitar el despliegue automático, configure RENDER_DEPLOY_HOOK_URL con la URL del Deploy Hook provista por Render."
+            echo "ℹ️ Omitiendo el disparo del despliegue automático en esta ejecución."
+          else
+            echo "🚀 Disparando despliegue en Render..."
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$RENDER_DEPLOY_HOOK")
+            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            echo "Respuesta de Render (HTTP $HTTP_STATUS): $BODY"
+            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+              echo "✅ Despliegue en Render solicitado exitosamente."
+            else
+              echo "❌ Error al disparar el despliegue en Render (Código HTTP: $HTTP_STATUS)"
+              exit 1
+            fi
+          fi
+
+      - name: 📋 Publicar resumen del Despliegue en el Job Summary
+        if: always()
+        run: |
+          echo "### 🚀 Estado del Despliegue en Render" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Resultado del Job:** ${{ job.status == 'success' && '✅ Despliegue Disparado' || '❌ Fallido' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Rama:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit desplegado:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Plataforma:** [Render](https://render.com)" >> $GITHUB_STEP_SUMMARY
+
