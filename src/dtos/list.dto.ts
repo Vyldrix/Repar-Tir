@@ -1,3 +1,5 @@
+export type ListStatus = 'BORRADOR' | 'CONFIRMADA' | 'ELIMINADA';
+
 export interface CreateListDto {
   title: string;
   userId: string;
@@ -16,6 +18,7 @@ export interface SearchListDto {
 export interface ListResponseDto {
   id: string;
   title: string;
+  status: ListStatus;
   userId: string;
   createdAt: string;
   updatedAt: string;
@@ -28,3 +31,4 @@ export interface PaginatedListsResponseDto {
   page: number;
   limit: number;
 }
+
