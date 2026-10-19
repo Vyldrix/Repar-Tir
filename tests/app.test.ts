@@ -837,4 +837,33 @@ describe('Configuración y Despliegue Automático en Render (HU21)', () => {
   });
 });
 
+// Separación de responsabilidades: Capa de Servicios para Listas (HU22)
+describe('Capa de Servicios para Listas - Separación Controlador vs Servicio (HU22)', () => {
+  const rootDir = process.cwd();
+
+  it('debe existir el archivo src/services/list.service.ts con los métodos de negocio', async () => {
+    const servicePath = path.join(rootDir, 'src', 'services', 'list.service.ts');
+    expect(fs.existsSync(servicePath)).toBe(true);
+
+    const { ListService } = await import('../src/services/list.service.js');
+    expect(typeof ListService.create).toBe('function');
+    expect(typeof ListService.update).toBe('function');
+    expect(typeof ListService.delete).toBe('function');
+    expect(typeof ListService.search).toBe('function');
+  });
+
+  it('ListController debe delegar las operaciones de negocio exclusivamente a ListService', () => {
+    const controllerPath = path.join(rootDir, 'src', 'controllers', 'list.controller.ts');
+    const content = fs.readFileSync(controllerPath, 'utf8');
+
+    expect(content).toContain("from '../services/list.service.js'");
+    expect(content).toContain('ListService.create');
+    expect(content).toContain('ListService.update');
+    expect(content).toContain('ListService.delete');
+    expect(content).toContain('ListService.search');
+    expect(content).not.toContain('ListModel.');
+  });
+});
+
+
 
