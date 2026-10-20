@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ListService } from '../services/list.service.js';
+import { SseService } from '../services/sse.service.js';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -42,6 +43,21 @@ export class ListController {
     res.status(result.status).json(result.data);
   }
 
+  static async streamEvents(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.getForEvents(id, userId);
+    if (result.status !== 200) {
+      res.status(result.status).json(result.data);
+      return;
+    }
+
+    SseService.subscribe(id, res);
+  }
+
   static async delete(req: Request, res: Response): Promise<void> {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -61,4 +77,5 @@ export class ListController {
     res.status(result.status).json(result.data);
   }
 }
+
 

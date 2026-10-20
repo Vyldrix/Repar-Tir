@@ -1193,6 +1193,84 @@ describe('POST /api/auth/logout - Cierre de sesión y revocación de tokens (HU2
   });
 });
 
+// Integración: Tarea Asíncrona en Background (Worker Thread) y Notificación SSE (HU28)
+describe('GET /api/lists/:id/events - Tarea asíncrona en background y notificación SSE (HU28)', () => {
+  let token: string;
+  let otherToken: string;
+
+  beforeAll(async () => {
+    const user = {
+      username: 'userSseHU28',
+      email: 'sse.hu28@example.com',
+      password: 'password123',
+    };
+    const other = {
+      username: 'otherSseHU28',
+      email: 'othersse.hu28@example.com',
+      password: 'password123',
+    };
+
+    await request(app).post('/api/auth/register').send(user);
+    await request(app).post('/api/auth/register').send(other);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+    token = loginRes.body.token;
+
+    const otherLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: other.email, password: other.password });
+    otherToken = otherLogin.body.token;
+  });
+
+  it('al cambiar a CONFIRMADA, debe disparar la tarea asíncrona en segundo plano y emitir el resultado por el canal SSE (text/event-stream)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista con procesamiento paralelo y SSE' });
+
+    const listId = createRes.body.id;
+
+    // 1. Cambiar estado a CONFIRMADA (dispara el Worker Thread en background)
+    const confirmRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(confirmRes.status).toBe(200);
+    expect(confirmRes.body.status).toBe('CONFIRMADA');
+
+    // 2. Conectarse al canal SSE GET /api/lists/:id/events y recibir el evento emitido
+    const sseRes = await request(app)
+      .get(`/api/lists/${listId}/events`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(sseRes.status).toBe(200);
+    expect(sseRes.headers['content-type']).toContain('text/event-stream');
+    expect(sseRes.text).toContain('event: connected');
+    expect(sseRes.text).toContain('event: list_processed');
+    expect(sseRes.text).toContain(listId);
+    expect(sseRes.text).toContain('Worker Thread');
+  });
+
+  it('debe rechazar con HTTP 403 si un usuario no propietario intenta suscribirse al canal SSE de la lista', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista SSE privada' });
+
+    const listId = createRes.body.id;
+
+    const forbiddenRes = await request(app)
+      .get(`/api/lists/${listId}/events`)
+      .set('Authorization', `Bearer ${otherToken}`);
+
+    expect(forbiddenRes.status).toBe(403);
+  });
+});
+
+
 
 
 
