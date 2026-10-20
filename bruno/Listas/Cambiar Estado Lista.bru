@@ -1,0 +1,35 @@
+meta {
+  name: Cambiar Estado Lista
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/api/lists/{{listId}}/status
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "status": "CONFIRMADA"
+  }
+}
+
+docs {
+  # Cambiar Estado de Lista (Máquina de Estados)
+  Actualiza el estado de una lista perteneciente al usuario autenticado aplicando reglas de transición estrictas:
+  - `BORRADOR -> CONFIRMADA` (válida, dispara procesamiento en segundo plano con Worker y SSE)
+  - `BORRADOR -> ELIMINADA` (válida)
+  - `CONFIRMADA -> ELIMINADA` (válida)
+
+  ### Respuestas Esperadas:
+  - **200 OK**: Transición aplicada exitosamente.
+  - **400 Bad Request**: Transición de estado inválida (`ELIMINADA -> BORRADOR`, `ELIMINADA -> CONFIRMADA`, `CONFIRMADA -> BORRADOR`).
+  - **403 Forbidden**: Intento de cambiar el estado de una lista ajena (protección IDOR).
+}

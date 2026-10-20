@@ -1,0 +1,33 @@
+meta {
+  name: 7. Transicion Invalida 3 - CONFIRMADA a BORRADOR (400)
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/api/lists/{{listId}}/status
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "status": "BORRADOR"
+  }
+}
+
+tests {
+  test("Debe rechazar con 400 Bad Request la transición inválida CONFIRMADA -> BORRADOR", function() {
+    expect(res.getStatus()).to.equal(400);
+  });
+}
+
+docs {
+  # Escenario 7: Transición Inválida 3 — `CONFIRMADA -> BORRADOR` (400 Bad Request)
+  Verifica que una lista ya `CONFIRMADA` no pueda retroceder al estado `BORRADOR`, devolviendo **400 Bad Request**.
+}

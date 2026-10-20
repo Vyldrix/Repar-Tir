@@ -1325,12 +1325,30 @@ describe('Interfaz Web Frontend en carpeta frontend/ servida vía Express (HU30)
   });
 });
 
+// Colección Bruno para Evaluación Docente (HU31)
+describe('Colección Bruno para Evaluación Docente (HU31)', () => {
+  const evalDir = path.resolve(process.cwd(), 'bruno', 'Evaluacion-Docente');
 
+  it('debe existir el directorio bruno/Evaluacion-Docente con los 8 escenarios de prueba exigidos por la cátedra', () => {
+    expect(fs.existsSync(evalDir)).toBe(true);
 
+    const expectedFiles = [
+      '1. Rechazo Fuerza Bruta (429).bru',
+      '2. Rechazo Token Expirado (401).bru',
+      '3. Proteccion IDOR Usuario No Propietario (403).bru',
+      '4. Idempotencia Creacion Lista (Idempotency-Key).bru',
+      '5. Transicion Invalida 1 - ELIMINADA a BORRADOR (400).bru',
+      '6. Transicion Invalida 2 - ELIMINADA a CONFIRMADA (400).bru',
+      '7. Transicion Invalida 3 - CONFIRMADA a BORRADOR (400).bru',
+      '8. Cierre de Sesion y Revocacion (Logout).bru',
+    ];
 
-
-
-
-
-
-
+    for (const fileName of expectedFiles) {
+      const fullPath = path.join(evalDir, fileName);
+      expect(fs.existsSync(fullPath)).toBe(true);
+      const content = fs.readFileSync(fullPath, 'utf8');
+      expect(content).toContain('tests {');
+      expect(content).toContain('docs {');
+    }
+  });
+});
