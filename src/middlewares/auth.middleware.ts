@@ -17,6 +17,10 @@ export function signJWT(payload: object, expiresInSeconds = 3600): string {
 }
 
 export function verifyJWT(token: string): { valid: boolean; payload?: any; error?: string } {
+  if (RefreshTokenStore.isAccessTokenRevoked(token)) {
+    return { valid: false, error: 'Token revocado (sesión cerrada)' };
+  }
+
   const parts = token.split('.');
   if (parts.length !== 3) {
     return { valid: false, error: 'Token malformado' };
@@ -46,8 +50,8 @@ export function verifyJWT(token: string): { valid: boolean; payload?: any; error
 
 /**
  * =========================================================================
- * Almacenamiento y gestión de Refresh Tokens (HU #13):
- * Permite validar estado (activo / revocado) y expiración de los refresh tokens.
+ * Almacenamiento y gestión de Refresh Tokens y Revocación (HU #13 y HU #27):
+ * Permite validar estado (activo / revocado) y expiración de los tokens.
  * =========================================================================
  */
 export interface RefreshTokenRecord {
@@ -59,6 +63,7 @@ export interface RefreshTokenRecord {
 
 export class RefreshTokenStore {
   private static store = new Map<string, RefreshTokenRecord>();
+  private static revokedAccessTokens = new Set<string>();
 
   static save(token: string, record: { userId: string; expiresAt: number; status?: 'active' | 'revoked' }): void {
     this.store.set(token, {
@@ -79,7 +84,29 @@ export class RefreshTokenStore {
       record.status = 'revoked';
       return true;
     }
-    return false;
+    this.store.set(token, {
+      token,
+      userId: '',
+      status: 'revoked',
+      expiresAt: 0,
+    });
+    return true;
+  }
+
+  static revokeByUserId(userId: string): void {
+    for (const record of this.store.values()) {
+      if (record.userId === userId) {
+        record.status = 'revoked';
+      }
+    }
+  }
+
+  static revokeAccessToken(token: string): void {
+    this.revokedAccessTokens.add(token);
+  }
+
+  static isAccessTokenRevoked(token: string): boolean {
+    return this.revokedAccessTokens.has(token);
   }
 
   static isRevoked(token: string): boolean {
@@ -89,6 +116,7 @@ export class RefreshTokenStore {
 
   static clear(): void {
     this.store.clear();
+    this.revokedAccessTokens.clear();
   }
 }
 
