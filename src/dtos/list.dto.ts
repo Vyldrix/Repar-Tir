@@ -3,6 +3,7 @@ export type ListStatus = 'BORRADOR' | 'CONFIRMADA' | 'ELIMINADA';
 export interface CreateListDto {
   title: string;
   userId: string;
+  idempotencyKey?: string;
 }
 
 export interface UpdateListDto {
