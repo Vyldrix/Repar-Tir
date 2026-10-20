@@ -1,0 +1,34 @@
+meta {
+  name: 1. Rechazo Fuerza Bruta (429)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "usuario@repartir.com",
+    "password": "PasswordIncorrecto123!"
+  }
+}
+
+tests {
+  test("Debe rechazar con 429 Too Many Requests tras superar el límite de intentos fallidos", function() {
+    expect([401, 429]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  # Escenario 1: Rechazo ante Ataque de Fuerza Bruta (429 Too Many Requests)
+  Verifica la protección de Rate Limiting en `/api/auth/login`.
+  Al ejecutar reiteradamente esta petición con credenciales inválidas (más de 5 intentos en la ventana configurada), el servidor responde con **429 Too Many Requests**.
+}

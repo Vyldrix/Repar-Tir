@@ -1,0 +1,33 @@
+meta {
+  name: 8. Cierre de Sesion y Revocacion (Logout)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/auth/logout
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+tests {
+  test("Debe cerrar la sesión y revocar el token con 200 OK", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  # Escenario 8: Cierre de Sesión y Revocación de Tokens (Logout)
+  Verifica que `POST /api/auth/logout` revoque tanto el `refreshToken` como el `accessToken` activo, impidiendo su uso posterior en `/api/auth/refresh` (403) o en rutas protegidas (401).
+}

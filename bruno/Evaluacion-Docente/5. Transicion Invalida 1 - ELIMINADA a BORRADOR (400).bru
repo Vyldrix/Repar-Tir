@@ -1,0 +1,33 @@
+meta {
+  name: 5. Transicion Invalida 1 - ELIMINADA a BORRADOR (400)
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/api/lists/{{listId}}/status
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "status": "BORRADOR"
+  }
+}
+
+tests {
+  test("Debe rechazar con 400 Bad Request la transición inválida ELIMINADA -> BORRADOR", function() {
+    expect(res.getStatus()).to.equal(400);
+  });
+}
+
+docs {
+  # Escenario 5: Transición Inválida 1 — `ELIMINADA -> BORRADOR` (400 Bad Request)
+  Verifica que una lista en estado terminal `ELIMINADA` no pueda volver al estado `BORRADOR`, devolviendo **400 Bad Request**.
+}

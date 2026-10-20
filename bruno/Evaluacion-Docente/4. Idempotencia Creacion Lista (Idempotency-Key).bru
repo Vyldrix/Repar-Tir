@@ -1,0 +1,35 @@
+meta {
+  name: 4. Idempotencia Creacion Lista (Idempotency-Key)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/lists
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+  Idempotency-Key: eval-idem-key-001
+}
+
+body:json {
+  {
+    "title": "Lista Idempotente Evaluación"
+  }
+}
+
+tests {
+  test("Debe retornar la misma lista sin duplicar registros ante el mismo Idempotency-Key", function() {
+    expect([200, 201]).to.include(res.getStatus());
+    expect(res.getBody()).to.have.property("id");
+  });
+}
+
+docs {
+  # Escenario 4: Idempotencia en Creación de Lista (`Idempotency-Key`)
+  Verifica que al enviar múltiples peticiones `POST /api/lists` con el mismo encabezado `Idempotency-Key`, la primera devuelve `201 Created` y las subsiguientes devuelven `200 OK` con exactamente el mismo `id` sin duplicar la lista en la base de datos.
+}

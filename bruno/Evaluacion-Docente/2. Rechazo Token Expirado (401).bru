@@ -1,0 +1,31 @@
+meta {
+  name: 2. Rechazo Token Expirado (401)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/lists/search
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWlkIiwiZXhwIjoxfQ.invalid_or_expired_signature
+}
+
+body:json {
+  {}
+}
+
+tests {
+  test("Debe rechazar con 401 Unauthorized un token expirado o inválido", function() {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
+
+docs {
+  # Escenario 2: Rechazo ante Token Expirado o Inválido (401 Unauthorized)
+  Verifica que el middleware `requireAuth` rechace con **401 Unauthorized** cualquier petición que adjunte un JWT expirado o alterado.
+}
