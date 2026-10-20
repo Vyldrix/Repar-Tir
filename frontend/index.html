@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Repar-Tir — Panel de Control y Pruebas API REST</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-badge">RT</span>
+      <div>
+        <h1>Repar-Tir</h1>
+        <p class="subtitle">Gestión de Listas, Estados, Idempotencia y Eventos SSE</p>
+      </div>
+    </div>
+    <div class="session-bar" id="sessionBar">
+      <span class="status-pill" id="authStatusPill">No autenticado</span>
+      <button id="btnLogout" class="btn btn-danger hidden" type="button">
+        Cerrar Sesión (Logout / Revocar)
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Columna Izquierda: Autenticación y Creación con Idempotencia -->
+    <section class="left-panel">
+      <!-- Tarjeta de Autenticación -->
+      <div class="card" id="authCard">
+        <h2>🔐 Autenticación y Sesión (JWT)</h2>
+        <div class="tabs">
+          <button type="button" class="tab active" data-tab="login">Iniciar Sesión</button>
+          <button type="button" class="tab" data-tab="register">Registrarse</button>
+        </div>
+
+        <form id="authForm">
+          <div class="form-group" id="usernameGroup" style="display: none;">
+            <label for="username">Nombre de usuario</label>
+            <input type="text" id="username" placeholder="ej. lautaro_dev" />
+          </div>
+          <div class="form-group">
+            <label for="email">Correo electrónico</label>
+            <input type="email" id="email" placeholder="usuario@ejemplo.com" required />
+          </div>
+          <div class="form-group">
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" placeholder="Mínimo 6 caracteres" required />
+          </div>
+          <button type="submit" class="btn btn-primary full-width" id="btnAuthSubmit">
+            Iniciar Sesión
+          </button>
+        </form>
+      </div>
+
+      <!-- Tarjeta de Creación con Idempotency-Key -->
+      <div class="card">
+        <h2>➕ Crear Lista (Protección de Idempotencia)</h2>
+        <form id="createListForm">
+          <div class="form-group">
+            <label for="listTitle">Título de la Lista / Operación</label>
+            <input type="text" id="listTitle" placeholder="Ej: Asado Fin de Semana" required />
+          </div>
+          <div class="form-group">
+            <label for="idempotencyKey">Cabecera <code>Idempotency-Key</code></label>
+            <div class="input-row">
+              <input type="text" id="idempotencyKey" placeholder="Clave única para deduplicación" />
+              <button type="button" class="btn btn-secondary" id="btnGenKey" title="Generar nueva clave">
+                🔄 Generar
+              </button>
+            </div>
+            <small class="hint">
+              Si enviás varias veces con la misma clave, la API devuelve el mismo ID sin duplicar en BD.
+            </small>
+          </div>
+          <button type="submit" class="btn btn-success full-width">
+            Enviar POST /api/lists
+          </button>
+        </form>
+      </div>
+
+      <!-- Consola de Eventos SSE y Respuestas HTTP -->
+      <div class="card">
+        <div class="card-header-row">
+          <h2>📡 Monitor HTTP & Eventos SSE (Worker Thread)</h2>
+          <button type="button" class="btn btn-sm" id="btnClearLog">Limpiar</button>
+        </div>
+        <div id="httpLog" class="console-log">
+          <div class="log-entry info">Sistema listo. Realice una petición para inspeccionar la respuesta HTTP.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Columna Derecha: Listado y Máquina de Estados -->
+    <section class="right-panel">
+      <div class="card">
+        <div class="card-header-row">
+          <h2>📋 Mis Listas y Máquina de Estados</h2>
+          <button type="button" class="btn btn-secondary" id="btnRefreshLists">
+            🔄 Actualizar Listas
+          </button>
+        </div>
+        <p class="hint">
+          Flujo válido: <code>BORRADOR ➔ CONFIRMADA ➔ ELIMINADA</code>. También podés probar las transiciones prohibidas para verificar el rechazo <code>HTTP 400</code>.
+        </p>
+
+        <div id="listsContainer" class="lists-grid">
+          <div class="empty-state">Iniciá sesión para consultar y gestionar tus listas.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app/app.js"></script>
+</body>
+</html>
