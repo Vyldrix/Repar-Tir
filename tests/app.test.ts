@@ -1143,6 +1143,57 @@ describe('POST /api/lists - Idempotencia mediante Idempotency-Key (HU26)', () =>
   });
 });
 
+// Seguridad: Cierre de Sesión y Revocación Comprobable de Credenciales (HU27)
+describe('POST /api/auth/logout - Cierre de sesión y revocación de tokens (HU27)', () => {
+  it('debe revocar el refresh token en POST /api/auth/logout e impedir su reutilización en POST /refresh (HTTP 403)', async () => {
+    const user = {
+      username: 'userLogoutHU27',
+      email: 'logout.hu27@example.com',
+      password: 'password123',
+    };
+    await request(app).post('/api/auth/register').send(user);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+
+    const { refreshToken, accessToken } = loginRes.body;
+
+    // 1. Verificar que el refresh token es válido antes de cerrar sesión
+    const refreshBefore = await request(app)
+      .post('/refresh')
+      .send({ refreshToken });
+    expect(refreshBefore.status).toBe(200);
+
+    // 2. Cerrar sesión y revocar el token
+    const logoutRes = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ refreshToken });
+    expect(logoutRes.status).toBe(200);
+
+    // 3. Intentar reutilizar el refresh token revocado en POST /refresh -> HTTP 403 Forbidden
+    const refreshAfter = await request(app)
+      .post('/refresh')
+      .send({ refreshToken });
+    expect(refreshAfter.status).toBe(403);
+    expect(refreshAfter.body.message).toMatch(/revocado/i);
+
+    // 4. Intentar usar el access token revocado en una ruta protegida -> HTTP 401 Unauthorized
+    const listAfterLogout = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ title: 'Intento post-logout' });
+    expect(listAfterLogout.status).toBe(401);
+  });
+
+  it('debe retornar HTTP 400 si no se envía refresh token ni token de autorización a revocar', async () => {
+    const res = await request(app).post('/api/auth/logout').send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+
 
 
 
