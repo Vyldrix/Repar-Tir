@@ -40,10 +40,29 @@ export class ListModel {
         title,
         status: 'BORRADOR',
         userId: data.userId,
+        idempotencyKey: data.idempotencyKey ?? null,
       },
     });
 
     return this.mapToDto(created);
+  }
+
+  static async findByUserAndIdempotencyKey(
+    userId: string,
+    idempotencyKey: string
+  ): Promise<List | undefined> {
+    const found = await prisma.list.findUnique({
+      where: {
+        userId_idempotencyKey: {
+          userId,
+          idempotencyKey,
+        },
+      },
+    });
+
+    if (!found) return undefined;
+
+    return this.mapToDto(found);
   }
 
   static async findById(id: string): Promise<List | undefined> {

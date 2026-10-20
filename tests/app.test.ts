@@ -1062,6 +1062,88 @@ describe('PATCH /api/lists/:id/status - Máquina de Estados y Transiciones (HU24
   });
 });
 
+// Protección Operativa: Idempotencia en Creación de Listas (HU26)
+describe('POST /api/lists - Idempotencia mediante Idempotency-Key (HU26)', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    const user = {
+      username: 'userIdempotenciaHU26',
+      email: 'idempotencia.hu26@example.com',
+      password: 'password123',
+    };
+    await request(app).post('/api/auth/register').send(user);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+    token = loginRes.body.token;
+  });
+
+  it('enviar exactamente la misma carga útil con la misma Idempotency-Key en repetidas ocasiones solo genera un registro y retorna el mismo ID original', async () => {
+    const idempotencyKey = 'idem-key-asado-viernes-001';
+    const payload = { title: 'Lista Idempotente Asado Viernes' };
+
+    const res1 = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+
+    expect(res1.status).toBe(201);
+    const originalId = res1.body.id;
+
+    // Segunda petición con la misma clave de idempotencia
+    const res2 = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+
+    expect([200, 201]).toContain(res2.status);
+    expect(res2.body.id).toBe(originalId);
+    expect(res2.body.title).toBe(payload.title);
+
+    // Tercera petición con la misma clave de idempotencia
+    const res3 = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+
+    expect([200, 201]).toContain(res3.status);
+    expect(res3.body.id).toBe(originalId);
+
+    // Verificar en búsqueda que solo se haya creado 1 registro en la BD
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ search: 'Lista Idempotente Asado Viernes' });
+
+    expect(searchRes.status).toBe(200);
+    expect(searchRes.body.lists).toHaveLength(1);
+    expect(searchRes.body.lists[0].id).toBe(originalId);
+  });
+
+  it('peticiones con diferente Idempotency-Key sí generan registros distintos', async () => {
+    const resA = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'idem-key-A')
+      .send({ title: 'Lista Clave A' });
+
+    const resB = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'idem-key-B')
+      .send({ title: 'Lista Clave A' });
+
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    expect(resA.body.id).not.toBe(resB.body.id);
+  });
+});
+
+
 
 
 

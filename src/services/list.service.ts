@@ -24,7 +24,13 @@ const ALLOWED_TRANSITIONS: Record<ListStatus, ListStatus[]> = {
 };
 
 export class ListService {
-  static async create(userId: string, title: unknown): Promise<ServiceResult<List>> {
+  private static inFlightCreations = new Map<string, Promise<List>>();
+
+  static async create(
+    userId: string,
+    title: unknown,
+    idempotencyKey?: string
+  ): Promise<ServiceResult<List>> {
     // 1. Validar presencia del título
     if (title === undefined || title === null) {
       return {
@@ -49,7 +55,54 @@ export class ListService {
       };
     }
 
-    // 4. Crear la lista y retornar 201 Created
+    const normalizedKey =
+      typeof idempotencyKey === 'string' && idempotencyKey.trim() !== ''
+        ? idempotencyKey.trim()
+        : undefined;
+
+    // 4. Protección Operativa (HU26): Verificar idempotencia si se envió Idempotency-Key
+    if (normalizedKey) {
+      const compositeKey = `${userId}:${normalizedKey}`;
+
+      const inFlight = this.inFlightCreations.get(compositeKey);
+      if (inFlight) {
+        const existing = await inFlight;
+        return {
+          status: 200,
+          data: existing,
+        };
+      }
+
+      const existingRecord = await ListModel.findByUserAndIdempotencyKey(
+        userId,
+        normalizedKey
+      );
+      if (existingRecord) {
+        return {
+          status: 200,
+          data: existingRecord,
+        };
+      }
+
+      const creationPromise = ListModel.create({
+        title,
+        userId,
+        idempotencyKey: normalizedKey,
+      });
+      this.inFlightCreations.set(compositeKey, creationPromise);
+
+      try {
+        const created = await creationPromise;
+        return {
+          status: 201,
+          data: created,
+        };
+      } finally {
+        this.inFlightCreations.delete(compositeKey);
+      }
+    }
+
+    // 5. Crear la lista sin clave de idempotencia y retornar 201 Created
     const newList = await ListModel.create({ title, userId });
 
     return {

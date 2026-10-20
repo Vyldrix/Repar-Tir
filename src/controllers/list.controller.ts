@@ -13,8 +13,10 @@ export class ListController {
     const { title } = req.body;
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user?.id || 'usuario-autenticado-id';
+    const idempotencyKey =
+      req.header('Idempotency-Key') || req.header('X-Idempotency-Key') || undefined;
 
-    const result = await ListService.create(userId, title);
+    const result = await ListService.create(userId, title, idempotencyKey);
     res.status(result.status).json(result.data);
   }
 

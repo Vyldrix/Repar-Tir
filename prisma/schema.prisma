@@ -21,14 +21,16 @@ model User {
 }
 
 model List {
-  id        String   @id @default(uuid())
-  title     String
-  status    String   @default("BORRADOR")
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  title          String
+  status         String   @default("BORRADOR")
+  idempotencyKey String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@unique([userId, idempotencyKey])
   @@index([userId])
   @@map("lists")
 }
