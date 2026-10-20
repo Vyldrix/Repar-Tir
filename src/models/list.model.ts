@@ -4,32 +4,46 @@ import {
   UpdateListDto,
   SearchListDto,
   ListResponseDto,
+  ListStatus,
   PaginatedListsResponseDto,
 } from '../dtos/list.dto.js';
 
 export type List = ListResponseDto;
 
 export class ListModel {
+  private static mapToDto(record: {
+    id: string;
+    title: string;
+    status: string;
+    userId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): List {
+    const isoCreatedAt = record.createdAt.toISOString();
+    const isoUpdatedAt = record.updatedAt.toISOString();
+
+    return {
+      id: record.id,
+      title: record.title,
+      status: (record.status as ListStatus) || 'BORRADOR',
+      userId: record.userId,
+      createdAt: isoCreatedAt,
+      updatedAt: isoUpdatedAt,
+      updated_at: isoUpdatedAt,
+    };
+  }
+
   static async create(data: CreateListDto): Promise<List> {
     const title = data.title.trim();
     const created = await prisma.list.create({
       data: {
         title,
+        status: 'BORRADOR',
         userId: data.userId,
       },
     });
 
-    const isoCreatedAt = created.createdAt.toISOString();
-    const isoUpdatedAt = created.updatedAt.toISOString();
-
-    return {
-      id: created.id,
-      title: created.title,
-      userId: created.userId,
-      createdAt: isoCreatedAt,
-      updatedAt: isoUpdatedAt,
-      updated_at: isoUpdatedAt,
-    };
+    return this.mapToDto(created);
   }
 
   static async findById(id: string): Promise<List | undefined> {
@@ -39,17 +53,7 @@ export class ListModel {
 
     if (!found) return undefined;
 
-    const isoCreatedAt = found.createdAt.toISOString();
-    const isoUpdatedAt = found.updatedAt.toISOString();
-
-    return {
-      id: found.id,
-      title: found.title,
-      userId: found.userId,
-      createdAt: isoCreatedAt,
-      updatedAt: isoUpdatedAt,
-      updated_at: isoUpdatedAt,
-    };
+    return this.mapToDto(found);
   }
 
   static async findByUserId(userId: string): Promise<List[]> {
@@ -58,18 +62,7 @@ export class ListModel {
       orderBy: { createdAt: 'desc' },
     });
 
-    return lists.map((l) => {
-      const isoCreatedAt = l.createdAt.toISOString();
-      const isoUpdatedAt = l.updatedAt.toISOString();
-      return {
-        id: l.id,
-        title: l.title,
-        userId: l.userId,
-        createdAt: isoCreatedAt,
-        updatedAt: isoUpdatedAt,
-        updated_at: isoUpdatedAt,
-      };
-    });
+    return lists.map((l) => this.mapToDto(l));
   }
 
   static async update(id: string, data: UpdateListDto): Promise<List | undefined> {
@@ -81,17 +74,7 @@ export class ListModel {
         },
       });
 
-      const isoCreatedAt = updated.createdAt.toISOString();
-      const isoUpdatedAt = updated.updatedAt.toISOString();
-
-      return {
-        id: updated.id,
-        title: updated.title,
-        userId: updated.userId,
-        createdAt: isoCreatedAt,
-        updatedAt: isoUpdatedAt,
-        updated_at: isoUpdatedAt,
-      };
+      return this.mapToDto(updated);
     } catch {
       return undefined;
     }
@@ -137,18 +120,7 @@ export class ListModel {
     ]);
 
     return {
-      lists: lists.map((l) => {
-        const isoCreatedAt = l.createdAt.toISOString();
-        const isoUpdatedAt = l.updatedAt.toISOString();
-        return {
-          id: l.id,
-          title: l.title,
-          userId: l.userId,
-          createdAt: isoCreatedAt,
-          updatedAt: isoUpdatedAt,
-          updated_at: isoUpdatedAt,
-        };
-      }),
+      lists: lists.map((l) => this.mapToDto(l)),
       total,
       page,
       limit,
@@ -159,3 +131,4 @@ export class ListModel {
     await prisma.list.deleteMany();
   }
 }
+

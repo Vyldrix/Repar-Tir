@@ -865,5 +865,47 @@ describe('Capa de Servicios para Listas - Separación Controlador vs Servicio (H
   });
 });
 
+// Modelado de Estados de Lista en Prisma y Migración de Base de Datos (HU23)
+describe('Modelado de Estados de Lista en Prisma y Migración (HU23)', () => {
+  const rootDir = process.cwd();
+
+  it('debe definir el campo status con valor por defecto BORRADOR en prisma/schema.prisma y contar con migración', () => {
+    const schemaPath = path.join(rootDir, 'prisma', 'schema.prisma');
+    const schemaContent = fs.readFileSync(schemaPath, 'utf8');
+    expect(schemaContent).toMatch(/status\s+String\s+@default\(["']BORRADOR["']\)/);
+
+    const migrationPath = path.join(
+      rootDir,
+      'prisma',
+      'migrations',
+      '20261019204700_add_list_status',
+      'migration.sql'
+    );
+    expect(fs.existsSync(migrationPath)).toBe(true);
+  });
+
+  it('al crear una lista nueva (POST /api/lists), el estado inicial asignado debe ser obligatoriamente BORRADOR', async () => {
+    const userPayload = {
+      username: 'userStatusHU23',
+      email: 'status.hu23@example.com',
+      password: 'password123',
+    };
+    await request(app).post('/api/auth/register').send(userPayload);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: userPayload.email, password: userPayload.password });
+    const token = loginRes.body.token;
+
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista con estado inicial BORRADOR' });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.status).toBe('BORRADOR');
+  });
+});
+
+
 
 
