@@ -906,6 +906,163 @@ describe('Modelado de Estados de Lista en Prisma y Migración (HU23)', () => {
   });
 });
 
+// Máquina de Estados de Lista y Tests de Transiciones Válidas e Inválidas (HU24 y HU25)
+describe('PATCH /api/lists/:id/status - Máquina de Estados y Transiciones (HU24 y HU25)', () => {
+  let ownerToken: string;
+  let otherUserToken: string;
+
+  beforeAll(async () => {
+    const owner = {
+      username: 'ownerEstadosHU25',
+      email: 'owner.estados@example.com',
+      password: 'password123',
+    };
+    const otherUser = {
+      username: 'otherEstadosHU25',
+      email: 'other.estados@example.com',
+      password: 'password123',
+    };
+
+    await request(app).post('/api/auth/register').send(owner);
+    await request(app).post('/api/auth/register').send(otherUser);
+
+    const ownerLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: owner.email, password: owner.password });
+    ownerToken = ownerLogin.body.token;
+
+    const otherLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: otherUser.email, password: otherUser.password });
+    otherUserToken = otherLogin.body.token;
+  });
+
+  it('debe verificar el avance exitoso de BORRADOR a CONFIRMADA (HTTP 200)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista para confirmar' });
+
+    const listId = createRes.body.id;
+
+    const statusRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('CONFIRMADA');
+  });
+
+  it('debe verificar el avance exitoso de CONFIRMADA a ELIMINADA (HTTP 200)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista confirmada para eliminar' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    const statusRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ELIMINADA' });
+
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('ELIMINADA');
+  });
+
+  it('Test 1 de transición inválida: Rechazo con HTTP 400 al intentar pasar de ELIMINADA a BORRADOR', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista eliminada - intento a borrador' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ELIMINADA' });
+
+    const invalidRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'BORRADOR' });
+
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body).toHaveProperty('message');
+    expect(invalidRes.body.message).toMatch(/ELIMINADA.*BORRADOR/i);
+  });
+
+  it('Test 2 de transición inválida: Rechazo con HTTP 400 al intentar pasar de ELIMINADA a CONFIRMADA', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista eliminada - intento a confirmada' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ELIMINADA' });
+
+    const invalidRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body).toHaveProperty('message');
+    expect(invalidRes.body.message).toMatch(/ELIMINADA.*confirmar/i);
+  });
+
+  it('Test 3 de transición inválida: Rechazo con HTTP 400 al intentar revertir de CONFIRMADA a BORRADOR', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista confirmada - intento revertir a borrador' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    const invalidRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'BORRADOR' });
+
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body).toHaveProperty('message');
+    expect(invalidRes.body.message).toMatch(/CONFIRMADA.*BORRADOR/i);
+  });
+
+  it('debe proteger el cambio de estado contra manipulación por parte de un usuario no propietario (IDOR - HTTP 403)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista protegida contra IDOR en estado' });
+
+    const listId = createRes.body.id;
+
+    const idorRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${otherUserToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(idorRes.status).toBe(403);
+  });
+});
+
+
 
 
 
