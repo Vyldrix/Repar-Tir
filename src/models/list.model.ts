@@ -80,6 +80,21 @@ export class ListModel {
     }
   }
 
+  static async updateStatus(id: string, status: ListStatus): Promise<List | undefined> {
+    try {
+      const updated = await prisma.list.update({
+        where: { id },
+        data: {
+          status,
+        },
+      });
+
+      return this.mapToDto(updated);
+    } catch {
+      return undefined;
+    }
+  }
+
   static async delete(id: string): Promise<boolean> {
     try {
       await prisma.list.delete({

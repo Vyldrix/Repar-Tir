@@ -1,5 +1,5 @@
 import { ListModel, List } from '../models/list.model.js';
-import { SearchListDto } from '../dtos/list.dto.js';
+import { SearchListDto, ListStatus } from '../dtos/list.dto.js';
 
 export interface ServiceResult<T> {
   status: number;
@@ -14,6 +14,14 @@ export interface SearchServiceResponse {
     limit: number;
   };
 }
+
+const VALID_STATUSES: ListStatus[] = ['BORRADOR', 'CONFIRMADA', 'ELIMINADA'];
+
+const ALLOWED_TRANSITIONS: Record<ListStatus, ListStatus[]> = {
+  BORRADOR: ['CONFIRMADA', 'ELIMINADA'],
+  CONFIRMADA: ['ELIMINADA'],
+  ELIMINADA: [],
+};
 
 export class ListService {
   static async create(userId: string, title: unknown): Promise<ServiceResult<List>> {
@@ -109,6 +117,96 @@ export class ListService {
     };
   }
 
+  static async updateStatus(
+    id: string,
+    userId: string | undefined,
+    newStatus: unknown
+  ): Promise<ServiceResult<List>> {
+    // 1. Verificar que la lista exista
+    const list = await ListModel.findById(id);
+    if (!list) {
+      return {
+        status: 404,
+        data: { message: 'Lista no encontrada' },
+      };
+    }
+
+    // 2. Verificar que solo el usuario propietario pueda mutar el estado (protección IDOR)
+    if (!userId || list.userId !== userId) {
+      return {
+        status: 403,
+        data: { message: 'No tienes permiso para modificar el estado de esta lista' },
+      };
+    }
+
+    // 3. Validar que el estado destino sea válido
+    if (
+      typeof newStatus !== 'string' ||
+      !VALID_STATUSES.includes(newStatus as ListStatus)
+    ) {
+      return {
+        status: 400,
+        data: {
+          message: 'El estado proporcionado es inválido. Valores permitidos: BORRADOR, CONFIRMADA, ELIMINADA',
+        },
+      };
+    }
+
+    const currentStatus = list.status;
+    const targetStatus = newStatus as ListStatus;
+
+    // 4. Validar máquina de estados y rechazar explícitamente las 3 transiciones prohibidas
+    if (currentStatus === 'ELIMINADA' && targetStatus === 'BORRADOR') {
+      return {
+        status: 400,
+        data: {
+          message: 'Transición de estado inválida: una lista ELIMINADA no puede reactivarse a BORRADOR',
+        },
+      };
+    }
+
+    if (currentStatus === 'ELIMINADA' && targetStatus === 'CONFIRMADA') {
+      return {
+        status: 400,
+        data: {
+          message: 'Transición de estado inválida: una lista ELIMINADA no puede confirmarse',
+        },
+      };
+    }
+
+    if (currentStatus === 'CONFIRMADA' && targetStatus === 'BORRADOR') {
+      return {
+        status: 400,
+        data: {
+          message: 'Transición de estado inválida: una lista CONFIRMADA no puede revertirse a BORRADOR',
+        },
+      };
+    }
+
+    if (!ALLOWED_TRANSITIONS[currentStatus].includes(targetStatus)) {
+      return {
+        status: 400,
+        data: {
+          message: `Transición de estado inválida: no se permite pasar de ${currentStatus} a ${targetStatus}`,
+        },
+      };
+    }
+
+    // 5. Aplicar el cambio de estado
+    const updatedList = await ListModel.updateStatus(id, targetStatus);
+    if (!updatedList) {
+      return {
+        status: 404,
+        data: { message: 'Lista no encontrada' },
+      };
+    }
+
+    return {
+      status: 200,
+      data: updatedList,
+    };
+  }
+
   static async delete(id: string, userId: string | undefined): Promise<ServiceResult<{ message: string }>> {
     // 1. Validar si la lista existe
     const list = await ListModel.findById(id);
@@ -180,3 +278,4 @@ export class ListService {
     };
   }
 }
+

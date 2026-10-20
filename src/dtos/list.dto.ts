@@ -9,6 +9,10 @@ export interface UpdateListDto {
   title: string;
 }
 
+export interface UpdateListStatusDto {
+  status: ListStatus;
+}
+
 export interface SearchListDto {
   search?: string;
   page?: number;
