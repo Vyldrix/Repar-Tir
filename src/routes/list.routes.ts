@@ -6,6 +6,7 @@ const listRouter = Router();
 
 listRouter.post('/', requireAuth, ListController.create);
 listRouter.post('/search', requireAuth, ListController.search);
+listRouter.patch('/:id/status', requireAuth, ListController.updateStatus);
 listRouter.put('/:id', requireAuth, ListController.update);
 listRouter.delete('/:id', requireAuth, ListController.delete);
 

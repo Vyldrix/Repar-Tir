@@ -29,6 +29,17 @@ export class ListController {
     res.status(result.status).json(result.data);
   }
 
+  static async updateStatus(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { status } = req.body;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.updateStatus(id, userId, status);
+    res.status(result.status).json(result.data);
+  }
+
   static async delete(req: Request, res: Response): Promise<void> {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
