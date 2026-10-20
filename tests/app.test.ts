@@ -1303,6 +1303,29 @@ describe('Contenerización End-to-End con Dockerfile y Docker Compose (HU29)', (
   });
 });
 
+// Frontend: Interfaz Web de Usuario en carpeta separada frontend/ (HU30)
+describe('Interfaz Web Frontend en carpeta frontend/ servida vía Express (HU30)', () => {
+  const rootDir = process.cwd();
+
+  it('debe existir la carpeta separada frontend/ con index.html, styles.css y app.js', () => {
+    expect(fs.existsSync(path.join(rootDir, 'frontend', 'index.html'))).toBe(true);
+    expect(fs.existsSync(path.join(rootDir, 'frontend', 'styles.css'))).toBe(true);
+    expect(fs.existsSync(path.join(rootDir, 'frontend', 'app.js'))).toBe(true);
+  });
+
+  it('debe servir la interfaz web en GET /app con los controles de autenticación, listas, Idempotency-Key, estados y SSE', async () => {
+    const res = await request(app).get('/app');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.text).toContain('Repar-Tir');
+    expect(res.text).toContain('Idempotency-Key');
+    expect(res.text).toContain('BORRADOR');
+    expect(res.text).toContain('CONFIRMADA');
+    expect(res.text).toContain('ELIMINADA');
+  });
+});
+
+
 
 
 
