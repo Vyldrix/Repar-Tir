@@ -133,6 +133,25 @@ repar-tir/
    ```
    La API quedará escuchando en `http://localhost:3000`.
 
+### 🐳 Ejecución con Docker y Docker Compose (HU29)
+
+Para levantar la solución completa en contenedor con su volumen de persistencia SQLite de manera aislada:
+
+```bash
+docker compose up --build
+```
+
+Para ejecutarlo en segundo plano (detached):
+
+```bash
+docker compose up -d --build
+```
+
+Verificar el estado del contenedor:
+```bash
+curl http://localhost:3000/api/health
+```
+
 ---
 
 ## 🔐 Variables de Entorno

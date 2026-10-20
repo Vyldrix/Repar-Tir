@@ -1270,6 +1270,40 @@ describe('GET /api/lists/:id/events - Tarea asíncrona en background y notificac
   });
 });
 
+// Contenerización con Docker y Docker Compose (HU29)
+describe('Contenerización End-to-End con Dockerfile y Docker Compose (HU29)', () => {
+  const rootDir = process.cwd();
+
+  it('debe existir un Dockerfile optimizado con multi-stage build para Node.js y compilación TypeScript', () => {
+    const dockerfilePath = path.join(rootDir, 'Dockerfile');
+    expect(fs.existsSync(dockerfilePath)).toBe(true);
+
+    const content = fs.readFileSync(dockerfilePath, 'utf8');
+    expect(content).toContain('FROM node:20-slim AS builder');
+    expect(content).toContain('FROM node:20-slim AS production');
+    expect(content).toContain('npm run build');
+    expect(content).toContain('EXPOSE 3000');
+  });
+
+  it('debe existir docker-compose.yml orquestando el servicio del backend y su volumen de persistencia', () => {
+    const composePath = path.join(rootDir, 'docker-compose.yml');
+    expect(fs.existsSync(composePath)).toBe(true);
+
+    const content = fs.readFileSync(composePath, 'utf8');
+    expect(content).toContain('repar-tir-backend:');
+    expect(content).toContain('3000:3000');
+    expect(content).toContain('volumes:');
+    expect(content).toContain('repar_tir_sqlite_data');
+  });
+
+  it('debe incluir en README.md la instrucción docker compose up --build', () => {
+    const readmePath = path.join(rootDir, 'README.md');
+    const content = fs.readFileSync(readmePath, 'utf8');
+    expect(content).toContain('docker compose up --build');
+  });
+});
+
+
 
 
 
