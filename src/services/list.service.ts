@@ -1,5 +1,6 @@
 import { ListModel, List } from '../models/list.model.js';
 import { SearchListDto, ListStatus } from '../dtos/list.dto.js';
+import { SseService } from './sse.service.js';
 
 export interface ServiceResult<T> {
   status: number;
@@ -254,9 +255,39 @@ export class ListService {
       };
     }
 
+    // 6. Al cambiar a CONFIRMADA, disparar tarea asíncrona en background sin bloquear el hilo principal (HU28)
+    if (targetStatus === 'CONFIRMADA') {
+      void SseService.triggerBackgroundConfirmation(updatedList.id, updatedList.title);
+    }
+
     return {
       status: 200,
       data: updatedList,
+    };
+  }
+
+  static async getForEvents(
+    id: string,
+    userId: string | undefined
+  ): Promise<ServiceResult<List>> {
+    const list = await ListModel.findById(id);
+    if (!list) {
+      return {
+        status: 404,
+        data: { message: 'Lista no encontrada' },
+      };
+    }
+
+    if (!userId || list.userId !== userId) {
+      return {
+        status: 403,
+        data: { message: 'No tienes permiso para acceder a los eventos de esta lista' },
+      };
+    }
+
+    return {
+      status: 200,
+      data: list,
     };
   }
 

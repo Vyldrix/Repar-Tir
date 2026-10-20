@@ -181,14 +181,19 @@ export function verifyRefreshToken(token: string): { valid: boolean; payload?: a
 
 export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
+  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
 
-  // 1. Validar presencia del encabezado Authorization con esquema Bearer
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token: string | undefined;
+
+  // 1. Validar presencia del encabezado Authorization con esquema Bearer o query token para SSE
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (queryToken) {
+    token = queryToken;
+  } else {
     res.status(401).json({ message: 'No autorizado: token no provisto' });
     return;
   }
-
-  const token = authHeader.split(' ')[1];
 
   if (!token || token.trim() === '' || token === 'Bearer') {
     res.status(401).json({ message: 'No autorizado: token no provisto' });
