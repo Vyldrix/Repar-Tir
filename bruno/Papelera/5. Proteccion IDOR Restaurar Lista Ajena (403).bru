@@ -1,0 +1,26 @@
+meta {
+  name: 5. Proteccion IDOR Restaurar Lista Ajena (403)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/lists/lista-ajena-id/restore
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+tests {
+  test("Debe rechazar con HTTP 403 Forbidden o 404 Not Found ante listas que no pertenezcan al usuario", function() {
+    expect([403, 404]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  # Protección IDOR al Restaurar
+  Verifica que un usuario autenticado no pueda restaurar ni manipular la papelera de otro usuario, mitigando vulnerabilidades de control de acceso.
+}

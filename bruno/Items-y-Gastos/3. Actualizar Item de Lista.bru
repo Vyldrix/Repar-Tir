@@ -1,0 +1,38 @@
+meta {
+  name: 3. Actualizar Item de Lista
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/lists/{{listId}}/items/{{itemId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "price": 2500,
+    "quantity": 2
+  }
+}
+
+tests {
+  test("Debe responder con HTTP 200 OK tras la actualización", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Debe reflejar el nuevo precio o cantidad y actualizar el total", function() {
+    expect(res.getBody().totalAmount).to.be.a("number");
+  });
+}
+
+docs {
+  # Actualizar Ítem en Lista
+  Permite modificar el nombre, precio unitario o cantidad de un ítem existente, recalculando los subtotales y el reparto.
+}

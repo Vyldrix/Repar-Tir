@@ -1,0 +1,28 @@
+meta {
+  name: 4. Purgar Listas Expiradas (30 Dias)
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/lists/trash/purge?days=30
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+tests {
+  test("Debe responder con HTTP 200 OK y reportar el conteo de purga", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.have.property("purgedCount");
+    expect(res.getBody().purgedCount).to.be.a("number");
+  });
+}
+
+docs {
+  # Purgar Listas Expiradas
+  Elimina físicamente y de forma definitiva de la base de datos todas las listas en papelera que superen los 30 días de antigüedad.
+}
