@@ -12,7 +12,7 @@
       <span class="logo-badge">RT</span>
       <div>
         <h1>Repar-Tir</h1>
-        <p class="subtitle">Gestión de Listas, Estados, Idempotencia y Eventos SSE</p>
+        <p class="subtitle">Gestión de Gastos, Reparto, Papelera, Estados e Idempotencia</p>
       </div>
     </div>
     <div class="session-bar" id="sessionBar">
@@ -24,7 +24,7 @@
   </header>
 
   <main class="container">
-    <!-- Columna Izquierda: Autenticación y Creación con Idempotencia -->
+    <!-- Columna Izquierda: Autenticación, Creación de Listas e Ítems -->
     <section class="left-panel">
       <!-- Tarjeta de Autenticación -->
       <div class="card" id="authCard">
@@ -53,13 +53,17 @@
         </form>
       </div>
 
-      <!-- Tarjeta de Creación con Idempotency-Key -->
+      <!-- Tarjeta de Creación con Participantes, Ítems e Idempotency-Key -->
       <div class="card">
-        <h2>➕ Crear Lista (Protección de Idempotencia)</h2>
+        <h2>➕ Crear Lista y Repartir Gastos</h2>
         <form id="createListForm">
           <div class="form-group">
-            <label for="listTitle">Título de la Lista / Operación</label>
-            <input type="text" id="listTitle" placeholder="Ej: Asado Fin de Semana" required />
+            <label for="listTitle">Título del Evento / Lista</label>
+            <input type="text" id="listTitle" placeholder="Ej: Asado del Domingo" required />
+          </div>
+          <div class="form-group">
+            <label for="participantsCount">👥 Cantidad de Personas a Repartir</label>
+            <input type="number" id="participantsCount" min="1" value="1" placeholder="Ej: 4 personas" required />
           </div>
           <div class="form-group">
             <label for="idempotencyKey">Cabecera <code>Idempotency-Key</code></label>
@@ -91,21 +95,55 @@
       </div>
     </section>
 
-    <!-- Columna Derecha: Listado y Máquina de Estados -->
+    <!-- Columna Derecha: Listado Activo, Cálculo de Gastos y Papelera de Reciclaje -->
     <section class="right-panel">
       <div class="card">
-        <div class="card-header-row">
-          <h2>📋 Mis Listas y Máquina de Estados</h2>
-          <button type="button" class="btn btn-secondary" id="btnRefreshLists">
-            🔄 Actualizar Listas
+        <div class="tabs view-tabs">
+          <button type="button" class="tab active" id="tabActiveView" data-view="active">
+            📋 Listas Activas
+          </button>
+          <button type="button" class="tab" id="tabTrashView" data-view="trash">
+            🗑️ Papelera de Reciclaje (<span id="trashBadgeCount">0</span>)
           </button>
         </div>
-        <p class="hint">
-          Flujo válido: <code>BORRADOR ➔ CONFIRMADA ➔ ELIMINADA</code>. También podés probar las transiciones prohibidas para verificar el rechazo <code>HTTP 400</code>.
-        </p>
 
-        <div id="listsContainer" class="lists-grid">
-          <div class="empty-state">Iniciá sesión para consultar y gestionar tus listas.</div>
+        <!-- Vista 1: Listas Activas -->
+        <div id="activeViewContainer">
+          <div class="card-header-row" style="margin-top: 1rem;">
+            <h2>📋 Listas, Gastos y División por Persona</h2>
+            <button type="button" class="btn btn-secondary" id="btnRefreshLists">
+              🔄 Actualizar Listas
+            </button>
+          </div>
+          <p class="hint">
+            Flujo válido: <code>BORRADOR ➔ CONFIRMADA ➔ ELIMINADA</code>. Podés agregar ítems a cada lista, ver el total y el cálculo exacto por persona.
+          </p>
+
+          <div id="listsContainer" class="lists-grid">
+            <div class="empty-state">Iniciá sesión para consultar y gestionar tus listas.</div>
+          </div>
+        </div>
+
+        <!-- Vista 2: Papelera de Reciclaje (Soft Delete con retención de 30 días) -->
+        <div id="trashViewContainer" style="display: none;">
+          <div class="card-header-row" style="margin-top: 1rem;">
+            <h2>🗑️ Papelera de Reciclaje (Retención 30 Días)</h2>
+            <div class="actions-row">
+              <button type="button" class="btn btn-secondary" id="btnRefreshTrash">
+                🔄 Actualizar Papelera
+              </button>
+              <button type="button" class="btn btn-danger" id="btnPurgeTrash" title="Eliminar definitivamente listas con más de 30 días">
+                🧹 Purgar Expiradas (+30d)
+              </button>
+            </div>
+          </div>
+          <p class="hint">
+            Las listas eliminadas permanecen 30 días en la papelera antes de ser eliminadas permanentemente. Podés restaurarlas en cualquier momento.
+          </p>
+
+          <div id="trashContainer" class="lists-grid">
+            <div class="empty-state">No hay listas en la papelera de reciclaje.</div>
+          </div>
         </div>
       </div>
     </section>

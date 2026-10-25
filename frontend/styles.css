@@ -346,3 +346,141 @@ input[type="password"] {
   border: 1px solid rgba(16, 185, 129, 0.35);
   color: #6ee7b7;
 }
+
+
+/* Gastos, Reparto y Participantes */
+.expense-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: #1e293b;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem;
+  margin: 0.4rem 0;
+}
+
+.expense-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.expense-col.highlight {
+  background: rgba(16, 185, 129, 0.15);
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.expense-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--border);
+}
+
+.expense-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.expense-total {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.expense-people {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #93c5fd;
+}
+
+.expense-per-person {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #34d399;
+}
+
+/* Tabla de Ítems */
+.items-container {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.items-table th {
+  text-align: left;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.items-table td {
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.empty-items {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.5rem !important;
+}
+
+/* Barra para añadir ítem */
+.add-item-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.input-sm {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: #fff;
+  flex: 1;
+}
+
+.btn-xs {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  border-radius: 4px;
+}
+
+.btn-warning {
+  background: var(--warning);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.btn-warning:hover {
+  background: #d97706;
+}
+
+/* Papelera de reciclaje */
+.trash-item {
+  border-left: 4px solid var(--warning);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
