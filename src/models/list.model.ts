@@ -79,6 +79,17 @@ export class ListModel {
         ? data.participantsCount
         : 1;
 
+    const itemsCreateData =
+      data.items && data.items.length > 0
+        ? {
+            create: data.items.map((i) => ({
+              name: i.name.trim(),
+              price: i.price !== undefined ? Math.max(0, i.price) : 0,
+              quantity: i.quantity !== undefined ? Math.max(1, i.quantity) : 1,
+            })),
+          }
+        : undefined;
+
     const created = await prisma.list.create({
       data: {
         title,
@@ -86,6 +97,7 @@ export class ListModel {
         userId: data.userId,
         participantsCount,
         idempotencyKey: data.idempotencyKey ?? null,
+        items: itemsCreateData,
       },
       include: {
         items: true,
