@@ -1352,3 +1352,377 @@ describe('Colección Bruno para Evaluación Docente (HU31)', () => {
     }
   });
 });
+
+
+// Gestión de Ítems, Cantidad de Personas y Cálculo de Gastos (HU32 y HU33)
+describe('Gestión de Ítems, Cantidad de Personas y Cálculo de Gastos (HU32 y HU33)', () => {
+  let tokenUserA: string;
+  let tokenUserB: string;
+
+  beforeAll(async () => {
+    // Registrar y loguear dos usuarios para pruebas y verificación IDOR
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioGastosA',
+      email: 'gastos.a@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginA = await request(app).post('/api/auth/login').send({
+      email: 'gastos.a@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenUserA = loginA.body.token;
+
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioGastosB',
+      email: 'gastos.b@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginB = await request(app).post('/api/auth/login').send({
+      email: 'gastos.b@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenUserB = loginB.body.token;
+  });
+
+  it('debe crear una lista con cantidad de personas y calcular totalAmount y amountPerPerson correctamente', async () => {
+    const res = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Asado con 4 amigos',
+        participantsCount: 4,
+        items: [
+          { name: 'Carne', price: 15000, quantity: 1 },
+          { name: 'Bebidas', price: 2500, quantity: 2 },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.participantsCount).toBe(4);
+    expect(res.body.items).toHaveLength(2);
+    // 15000 + (2500 * 2) = 20000; 20000 / 4 = 5000
+    expect(res.body.totalAmount).toBe(20000);
+    expect(res.body.amountPerPerson).toBe(5000);
+  });
+
+  it('debe rechazar la creación si participantsCount es menor a 1 o no es un entero', async () => {
+    const resNegative = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista inválida',
+        participantsCount: 0,
+      });
+
+    expect(resNegative.status).toBe(400);
+
+    const resFloat = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista inválida decimal',
+        participantsCount: 3.5,
+      });
+
+    expect(resFloat.status).toBe(400);
+  });
+
+  it('debe permitir agregar un ítem dinámicamente con POST /api/lists/:id/items y recalcular los totales', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista dinámica para agregar ítems',
+        participantsCount: 2,
+      });
+
+    const listId = createRes.body.id;
+    expect(createRes.body.totalAmount).toBe(0);
+
+    const addItemRes = await request(app)
+      .post(`/api/lists/${listId}/items`)
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        name: 'Carbón vegetal',
+        price: 3000,
+        quantity: 2,
+      });
+
+    expect(addItemRes.status).toBe(201);
+    expect(addItemRes.body.items).toHaveLength(1);
+    expect(addItemRes.body.items[0].subtotal).toBe(6000);
+    expect(addItemRes.body.totalAmount).toBe(6000);
+    expect(addItemRes.body.amountPerPerson).toBe(3000);
+  });
+
+  it('debe permitir actualizar un ítem con PUT /api/lists/:id/items/:itemId y recalcular el total', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista para editar ítem',
+        participantsCount: 2,
+        items: [{ name: 'Pan de campo', price: 1000, quantity: 1 }],
+      });
+
+    const listId = createRes.body.id;
+    const itemId = createRes.body.items[0].id;
+
+    const updateItemRes = await request(app)
+      .put(`/api/lists/${listId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        price: 1500,
+        quantity: 4,
+      });
+
+    expect(updateItemRes.status).toBe(200);
+    // 1500 * 4 = 6000; 6000 / 2 = 3000
+    expect(updateItemRes.body.totalAmount).toBe(6000);
+    expect(updateItemRes.body.amountPerPerson).toBe(3000);
+  });
+
+  it('debe permitir eliminar un ítem con DELETE /api/lists/:id/items/:itemId y recalcular', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista para borrar ítem',
+        participantsCount: 2,
+        items: [
+          { name: 'Helado', price: 5000, quantity: 1 },
+          { name: 'Servilletas', price: 1000, quantity: 1 },
+        ],
+      });
+
+    const listId = createRes.body.id;
+    const itemIdToDelete = createRes.body.items[1].id;
+
+    const deleteItemRes = await request(app)
+      .delete(`/api/lists/${listId}/items/${itemIdToDelete}`)
+      .set('Authorization', `Bearer ${tokenUserA}`);
+
+    expect(deleteItemRes.status).toBe(200);
+    expect(deleteItemRes.body.items).toHaveLength(1);
+    expect(deleteItemRes.body.totalAmount).toBe(5000);
+    expect(deleteItemRes.body.amountPerPerson).toBe(2500);
+  });
+
+  it('debe proteger contra IDOR al intentar agregar o modificar ítems de una lista ajena (HTTP 403)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista protegida de usuario A',
+        participantsCount: 3,
+        items: [{ name: 'Secreto A', price: 1000, quantity: 1 }],
+      });
+
+    const listId = createRes.body.id;
+    const itemId = createRes.body.items[0].id;
+
+    const idorAddRes = await request(app)
+      .post(`/api/lists/${listId}/items`)
+      .set('Authorization', `Bearer ${tokenUserB}`)
+      .send({ name: 'Inyección ajena', price: 9999, quantity: 1 });
+
+    expect(idorAddRes.status).toBe(403);
+
+    const idorUpdateRes = await request(app)
+      .put(`/api/lists/${listId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${tokenUserB}`)
+      .send({ price: 1 });
+
+    expect(idorUpdateRes.status).toBe(403);
+
+    const idorDeleteRes = await request(app)
+      .delete(`/api/lists/${listId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${tokenUserB}`);
+
+    expect(idorDeleteRes.status).toBe(403);
+  });
+});
+
+// Papelera de Reciclaje (Soft Delete), Restauración y Purga tras 30 Días (HU34 y HU35)
+describe('Papelera de Reciclaje (Soft Delete), Restauración y Purga tras 30 Días (HU34 y HU35)', () => {
+  let tokenUser: string;
+  let tokenOther: string;
+
+  beforeAll(async () => {
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioPapelera1',
+      email: 'papelera1@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginRes = await request(app).post('/api/auth/login').send({
+      email: 'papelera1@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenUser = loginRes.body.token;
+
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioPapelera2',
+      email: 'papelera2@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginOtherRes = await request(app).post('/api/auth/login').send({
+      email: 'papelera2@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenOther = loginOtherRes.body.token;
+  });
+
+  it('al borrar una lista con DELETE /api/lists/:id debe ir a la papelera (soft delete) y desaparecer de search', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista que irá a la papelera' });
+
+    const listId = createRes.body.id;
+
+    // Enviar a papelera
+    const deleteRes = await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(deleteRes.status).toBe(200);
+
+    // Verificar que ya no aparece en la búsqueda activa
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ search: 'Lista que irá a la papelera' });
+
+    expect(searchRes.status).toBe(200);
+    const foundInActive = searchRes.body.lists.find((l: { id: string }) => l.id === listId);
+    expect(foundInActive).toBeUndefined();
+
+    // Verificar que SÍ aparece en la papelera
+    const trashRes = await request(app)
+      .get('/api/lists/trash')
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(trashRes.status).toBe(200);
+    const foundInTrash = trashRes.body.find((l: { id: string }) => l.id === listId);
+    expect(foundInTrash).toBeDefined();
+    expect(foundInTrash).toHaveProperty('daysRemaining');
+    expect(foundInTrash.daysRemaining).toBeLessThanOrEqual(30);
+  });
+
+  it('debe permitir restaurar una lista desde la papelera con POST /api/lists/:id/restore y volver a figurar en search', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista para restaurar' });
+
+    const listId = createRes.body.id;
+
+    // Enviar a papelera
+    await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    // Restaurar desde papelera
+    const restoreRes = await request(app)
+      .post(`/api/lists/${listId}/restore`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(restoreRes.status).toBe(200);
+    expect(restoreRes.body.id).toBe(listId);
+    expect(restoreRes.body.deletedAt).toBeNull();
+
+    // Comprobar que vuelve a estar activa
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ search: 'Lista para restaurar' });
+
+    expect(searchRes.status).toBe(200);
+    const restoredFound = searchRes.body.lists.find((l: { id: string }) => l.id === listId);
+    expect(restoredFound).toBeDefined();
+  });
+
+  it('debe rechazar con HTTP 403 Forbidden si otro usuario intenta restaurar una lista ajena', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista privada de User 1 en papelera' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    const idorRestoreRes = await request(app)
+      .post(`/api/lists/${listId}/restore`)
+      .set('Authorization', `Bearer ${tokenOther}`);
+
+    expect(idorRestoreRes.status).toBe(403);
+  });
+
+  it('debe purgar definitivamente de la BD listas con más de 30 días en la papelera vía DELETE /api/lists/trash/purge', async () => {
+    // Crear lista directamente simulando fecha deletedAt de hace 35 días
+    const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+
+    const oldList = await prisma.list.create({
+      data: {
+        title: 'Lista antigua expirada de hace 35 días',
+        userId: (await prisma.user.findFirst({ where: { email: 'papelera1@example.com' } }))!.id,
+        deletedAt: thirtyFiveDaysAgo,
+      },
+    });
+
+    // Ejecutar purga de 30 días
+    const purgeRes = await request(app)
+      .delete('/api/lists/trash/purge?days=30')
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(purgeRes.status).toBe(200);
+    expect(purgeRes.body.purgedCount).toBeGreaterThanOrEqual(1);
+
+    // Verificar que ya no existe físicamente en Prisma
+    const physicallyDeleted = await prisma.list.findUnique({
+      where: { id: oldList.id },
+    });
+    expect(physicallyDeleted).toBeNull();
+  });
+});
+
+// Verificación de Frontend y Colección Bruno (HU36 y HU37)
+describe('Frontend y Colección de Bruno para Ítems y Papelera (HU36 y HU37)', () => {
+  const rootDir = process.cwd();
+
+  it('el frontend web debe incluir controles para participantes, ítems y papelera con retención de 30 días', () => {
+    const htmlPath = path.join(rootDir, 'frontend', 'index.html');
+    const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+
+    expect(htmlContent).toContain('participantsCount');
+    expect(htmlContent).toContain('Papelera de Reciclaje');
+    expect(htmlContent).toContain('30 Días');
+
+    const jsPath = path.join(rootDir, 'frontend', 'app.js');
+    const jsContent = fs.readFileSync(jsPath, 'utf8');
+
+    expect(jsContent).toContain('loadTrash');
+    expect(jsContent).toContain('restoreFromTrash');
+    expect(jsContent).toContain('addItemToList');
+    expect(jsContent).toContain('amountPerPerson');
+  });
+
+  it('deben existir los archivos de Bruno para Items-y-Gastos y Papelera', () => {
+    const itemsDir = path.join(rootDir, 'bruno', 'Items-y-Gastos');
+    const trashDir = path.join(rootDir, 'bruno', 'Papelera');
+
+    expect(fs.existsSync(path.join(itemsDir, '1. Crear Lista con Participantes e Items.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(itemsDir, '2. Agregar Item a Lista.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(itemsDir, '3. Actualizar Item de Lista.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(itemsDir, '4. Eliminar Item de Lista.bru'))).toBe(true);
+
+    expect(fs.existsSync(path.join(trashDir, '1. Enviar Lista a Papelera (Soft Delete).bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '2. Consultar Listas en Papelera.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '3. Restaurar Lista de Papelera.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '4. Purgar Listas Expiradas (30 Dias).bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '5. Proteccion IDOR Restaurar Lista Ajena (403).bru'))).toBe(true);
+  });
+});
