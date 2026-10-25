@@ -21,16 +21,34 @@ model User {
 }
 
 model List {
-  id             String   @id @default(uuid())
-  title          String
-  status         String   @default("BORRADOR")
-  idempotencyKey String?
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                String     @id @default(uuid())
+  title             String
+  status            String     @default("BORRADOR")
+  idempotencyKey    String?
+  participantsCount Int        @default(1)
+  deletedAt         DateTime?
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             ListItem[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   @@unique([userId, idempotencyKey])
   @@index([userId])
+  @@index([deletedAt])
   @@map("lists")
+}
+
+model ListItem {
+  id        String   @id @default(uuid())
+  name      String
+  price     Float    @default(0)
+  quantity  Int      @default(1)
+  listId    String
+  list      List     @relation(fields: [listId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([listId])
+  @@map("list_items")
 }
