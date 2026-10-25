@@ -39,6 +39,12 @@ export class ListController {
     res.status(result.status).json(result.data);
   }
 
+  static async purgeTrash(req: Request, res: Response): Promise<void> {
+    const days = req.query.days ? Number(req.query.days) : 30;
+    const result = await ListService.purgeExpiredTrash(days);
+    res.status(result.status).json(result.data);
+  }
+
   static async restore(req: Request, res: Response): Promise<void> {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
