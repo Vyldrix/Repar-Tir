@@ -242,6 +242,19 @@ export class ListModel {
     return lists.map((l) => this.mapToDto(l));
   }
 
+  static async purgeExpiredTrash(retentionDays = 30): Promise<number> {
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const result = await prisma.list.deleteMany({
+      where: {
+        deletedAt: {
+          lte: cutoffDate,
+        },
+      },
+    });
+
+    return result.count;
+  }
+
   static async delete(id: string): Promise<boolean> {
     try {
       await prisma.list.delete({

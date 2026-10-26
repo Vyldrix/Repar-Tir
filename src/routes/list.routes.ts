@@ -7,8 +7,9 @@ const listRouter = Router();
 listRouter.post('/', requireAuth, ListController.create);
 listRouter.post('/search', requireAuth, ListController.search);
 
-// Papelera de reciclaje (declarada antes de /:id para evitar colisiones de rutas)
+// Papelera de reciclaje y purga (declaradas antes de /:id para evitar colisiones de rutas)
 listRouter.get('/trash', requireAuth, ListController.getTrash);
+listRouter.delete('/trash/purge', requireAuth, ListController.purgeTrash);
 
 // Eventos SSE y obtención individual
 listRouter.get('/:id/events', requireAuth, ListController.streamEvents);

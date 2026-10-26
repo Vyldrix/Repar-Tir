@@ -675,6 +675,22 @@ export class ListService {
     };
   }
 
+  static async purgeExpiredTrash(
+    retentionDays = 30
+  ): Promise<ServiceResult<{ message: string; purgedCount: number }>> {
+    const validDays =
+      typeof retentionDays === 'number' && retentionDays > 0 ? retentionDays : 30;
+    const purgedCount = await ListModel.purgeExpiredTrash(validDays);
+
+    return {
+      status: 200,
+      data: {
+        message: `Purga completada. Se eliminaron definitivamente ${purgedCount} lista(s) con más de ${validDays} días en la papelera`,
+        purgedCount,
+      },
+    };
+  }
+
   static async getTrash(userId: string): Promise<ServiceResult<TrashListSummary[]>> {
     const lists = await ListModel.findTrashByUserId(userId);
     const now = Date.now();
