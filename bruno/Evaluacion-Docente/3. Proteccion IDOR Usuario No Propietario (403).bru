@@ -1,0 +1,33 @@
+meta {
+  name: 3. Proteccion IDOR Usuario No Propietario (403)
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/lists/{{listId}}/status
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{otherUserToken}}
+}
+
+body:json {
+  {
+    "status": "CONFIRMADA"
+  }
+}
+
+tests {
+  test("Debe rechazar con 403 Forbidden cuando otro usuario intenta modificar una lista ajena", function() {
+    expect(res.getStatus()).to.equal(403);
+  });
+}
+
+docs {
+  # Escenario 3: Protección IDOR — Usuario No Propietario (403 Forbidden)
+  Verifica que un usuario autenticado con `{{otherUserToken}}` no pueda modificar ni cambiar el estado de la lista `{{listId}}` perteneciente a otro usuario, recibiendo **403 Forbidden**.
+}

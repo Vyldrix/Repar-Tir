@@ -1,3 +1,4 @@
+import path from 'node:path';
 import express, { Express, Request, Response } from 'express';
 import authRouter from './routes/auth.routes.js';
 import listRouter from './routes/list.routes.js';
@@ -24,13 +25,27 @@ app.use((_req, res, next) => {
 // Límite de peticiones por IP (Rate Limiting)
 app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
 
+// Interfaz Frontend Web estática ubicada en la carpeta separada frontend/ (HU30)
+const frontendDir = path.resolve(process.cwd(), 'frontend');
+app.get('/app', (_req: Request, res: Response) => {
+  res.sendFile(path.join(frontendDir, 'index.html'));
+});
+app.use('/app', express.static(frontendDir));
+app.get('/', (_req: Request, res: Response) => {
+  res.sendFile(path.join(frontendDir, 'index.html'));
+});
+
 // Rutas
 app.use('/api/auth', authRouter);
 app.use('/api/lists', listRouter);
 
-// Endpoint HTTP POST /refresh y aliases directos (HU #13)
+// Endpoint HTTP POST /refresh, /logout y /revoke con aliases directos (HU #13 y HU #27)
 app.post('/refresh', AuthController.refresh);
 app.post('/api/refresh', AuthController.refresh);
+app.post('/logout', AuthController.logout);
+app.post('/api/logout', AuthController.logout);
+app.post('/revoke', AuthController.revoke);
+app.post('/api/revoke', AuthController.revoke);
 
 // Endpoint de verificación de salud del servicio
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -41,3 +56,4 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 export default app;
+

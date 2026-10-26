@@ -820,7 +820,7 @@ describe('Configuración y Despliegue Automático en Render (HU21)', () => {
 
     const content = fs.readFileSync(ciPath, 'utf8');
     expect(content).toContain('deploy-to-render:');
-    expect(content).toContain('needs: validate-and-test');
+    expect(content).toContain('needs: build');
     expect(content).toContain("refs/heads/main");
     expect(content).toContain('secrets.RENDER_DEPLOY_HOOK_URL');
   });
@@ -837,4 +837,892 @@ describe('Configuración y Despliegue Automático en Render (HU21)', () => {
   });
 });
 
+// Separación de responsabilidades: Capa de Servicios para Listas (HU22)
+describe('Capa de Servicios para Listas - Separación Controlador vs Servicio (HU22)', () => {
+  const rootDir = process.cwd();
 
+  it('debe existir el archivo src/services/list.service.ts con los métodos de negocio', async () => {
+    const servicePath = path.join(rootDir, 'src', 'services', 'list.service.ts');
+    expect(fs.existsSync(servicePath)).toBe(true);
+
+    const { ListService } = await import('../src/services/list.service.js');
+    expect(typeof ListService.create).toBe('function');
+    expect(typeof ListService.update).toBe('function');
+    expect(typeof ListService.delete).toBe('function');
+    expect(typeof ListService.search).toBe('function');
+  });
+
+  it('ListController debe delegar las operaciones de negocio exclusivamente a ListService', () => {
+    const controllerPath = path.join(rootDir, 'src', 'controllers', 'list.controller.ts');
+    const content = fs.readFileSync(controllerPath, 'utf8');
+
+    expect(content).toContain("from '../services/list.service.js'");
+    expect(content).toContain('ListService.create');
+    expect(content).toContain('ListService.update');
+    expect(content).toContain('ListService.delete');
+    expect(content).toContain('ListService.search');
+    expect(content).not.toContain('ListModel.');
+  });
+});
+
+// Modelado de Estados de Lista en Prisma y Migración de Base de Datos (HU23)
+describe('Modelado de Estados de Lista en Prisma y Migración (HU23)', () => {
+  const rootDir = process.cwd();
+
+  it('debe definir el campo status con valor por defecto BORRADOR en prisma/schema.prisma y contar con migración', () => {
+    const schemaPath = path.join(rootDir, 'prisma', 'schema.prisma');
+    const schemaContent = fs.readFileSync(schemaPath, 'utf8');
+    expect(schemaContent).toMatch(/status\s+String\s+@default\(["']BORRADOR["']\)/);
+
+    const migrationPath = path.join(
+      rootDir,
+      'prisma',
+      'migrations',
+      '20261019204700_add_list_status',
+      'migration.sql'
+    );
+    expect(fs.existsSync(migrationPath)).toBe(true);
+  });
+
+  it('al crear una lista nueva (POST /api/lists), el estado inicial asignado debe ser obligatoriamente BORRADOR', async () => {
+    const userPayload = {
+      username: 'userStatusHU23',
+      email: 'status.hu23@example.com',
+      password: 'password123',
+    };
+    await request(app).post('/api/auth/register').send(userPayload);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: userPayload.email, password: userPayload.password });
+    const token = loginRes.body.token;
+
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista con estado inicial BORRADOR' });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.status).toBe('BORRADOR');
+  });
+});
+
+// Máquina de Estados de Lista y Tests de Transiciones Válidas e Inválidas (HU24 y HU25)
+describe('PATCH /api/lists/:id/status - Máquina de Estados y Transiciones (HU24 y HU25)', () => {
+  let ownerToken: string;
+  let otherUserToken: string;
+
+  beforeAll(async () => {
+    const owner = {
+      username: 'ownerEstadosHU25',
+      email: 'owner.estados@example.com',
+      password: 'password123',
+    };
+    const otherUser = {
+      username: 'otherEstadosHU25',
+      email: 'other.estados@example.com',
+      password: 'password123',
+    };
+
+    await request(app).post('/api/auth/register').send(owner);
+    await request(app).post('/api/auth/register').send(otherUser);
+
+    const ownerLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: owner.email, password: owner.password });
+    ownerToken = ownerLogin.body.token;
+
+    const otherLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: otherUser.email, password: otherUser.password });
+    otherUserToken = otherLogin.body.token;
+  });
+
+  it('debe verificar el avance exitoso de BORRADOR a CONFIRMADA (HTTP 200)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista para confirmar' });
+
+    const listId = createRes.body.id;
+
+    const statusRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('CONFIRMADA');
+  });
+
+  it('debe verificar el avance exitoso de CONFIRMADA a ELIMINADA (HTTP 200)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista confirmada para eliminar' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    const statusRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ELIMINADA' });
+
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('ELIMINADA');
+  });
+
+  it('Test 1 de transición inválida: Rechazo con HTTP 400 al intentar pasar de ELIMINADA a BORRADOR', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista eliminada - intento a borrador' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ELIMINADA' });
+
+    const invalidRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'BORRADOR' });
+
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body).toHaveProperty('message');
+    expect(invalidRes.body.message).toMatch(/ELIMINADA.*BORRADOR/i);
+  });
+
+  it('Test 2 de transición inválida: Rechazo con HTTP 400 al intentar pasar de ELIMINADA a CONFIRMADA', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista eliminada - intento a confirmada' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ELIMINADA' });
+
+    const invalidRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body).toHaveProperty('message');
+    expect(invalidRes.body.message).toMatch(/ELIMINADA.*confirmar/i);
+  });
+
+  it('Test 3 de transición inválida: Rechazo con HTTP 400 al intentar revertir de CONFIRMADA a BORRADOR', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista confirmada - intento revertir a borrador' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    const invalidRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'BORRADOR' });
+
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body).toHaveProperty('message');
+    expect(invalidRes.body.message).toMatch(/CONFIRMADA.*BORRADOR/i);
+  });
+
+  it('debe proteger el cambio de estado contra manipulación por parte de un usuario no propietario (IDOR - HTTP 403)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Lista protegida contra IDOR en estado' });
+
+    const listId = createRes.body.id;
+
+    const idorRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${otherUserToken}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(idorRes.status).toBe(403);
+  });
+});
+
+// Protección Operativa: Idempotencia en Creación de Listas (HU26)
+describe('POST /api/lists - Idempotencia mediante Idempotency-Key (HU26)', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    const user = {
+      username: 'userIdempotenciaHU26',
+      email: 'idempotencia.hu26@example.com',
+      password: 'password123',
+    };
+    await request(app).post('/api/auth/register').send(user);
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+    token = loginRes.body.token;
+  });
+
+  it('enviar exactamente la misma carga útil con la misma Idempotency-Key en repetidas ocasiones solo genera un registro y retorna el mismo ID original', async () => {
+    const idempotencyKey = 'idem-key-asado-viernes-001';
+    const payload = { title: 'Lista Idempotente Asado Viernes' };
+
+    const res1 = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+
+    expect(res1.status).toBe(201);
+    const originalId = res1.body.id;
+
+    // Segunda petición con la misma clave de idempotencia
+    const res2 = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+
+    expect([200, 201]).toContain(res2.status);
+    expect(res2.body.id).toBe(originalId);
+    expect(res2.body.title).toBe(payload.title);
+
+    // Tercera petición con la misma clave de idempotencia
+    const res3 = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+
+    expect([200, 201]).toContain(res3.status);
+    expect(res3.body.id).toBe(originalId);
+
+    // Verificar en búsqueda que solo se haya creado 1 registro en la BD
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ search: 'Lista Idempotente Asado Viernes' });
+
+    expect(searchRes.status).toBe(200);
+    expect(searchRes.body.lists).toHaveLength(1);
+    expect(searchRes.body.lists[0].id).toBe(originalId);
+  });
+
+  it('peticiones con diferente Idempotency-Key sí generan registros distintos', async () => {
+    const resA = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'idem-key-A')
+      .send({ title: 'Lista Clave A' });
+
+    const resB = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'idem-key-B')
+      .send({ title: 'Lista Clave A' });
+
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    expect(resA.body.id).not.toBe(resB.body.id);
+  });
+});
+
+// Seguridad: Cierre de Sesión y Revocación Comprobable de Credenciales (HU27)
+describe('POST /api/auth/logout - Cierre de sesión y revocación de tokens (HU27)', () => {
+  it('debe revocar el refresh token en POST /api/auth/logout e impedir su reutilización en POST /refresh (HTTP 403)', async () => {
+    const user = {
+      username: 'userLogoutHU27',
+      email: 'logout.hu27@example.com',
+      password: 'password123',
+    };
+    await request(app).post('/api/auth/register').send(user);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+
+    const { refreshToken, accessToken } = loginRes.body;
+
+    // 1. Verificar que el refresh token es válido antes de cerrar sesión
+    const refreshBefore = await request(app)
+      .post('/refresh')
+      .send({ refreshToken });
+    expect(refreshBefore.status).toBe(200);
+
+    // 2. Cerrar sesión y revocar el token
+    const logoutRes = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ refreshToken });
+    expect(logoutRes.status).toBe(200);
+
+    // 3. Intentar reutilizar el refresh token revocado en POST /refresh -> HTTP 403 Forbidden
+    const refreshAfter = await request(app)
+      .post('/refresh')
+      .send({ refreshToken });
+    expect(refreshAfter.status).toBe(403);
+    expect(refreshAfter.body.message).toMatch(/revocado/i);
+
+    // 4. Intentar usar el access token revocado en una ruta protegida -> HTTP 401 Unauthorized
+    const listAfterLogout = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ title: 'Intento post-logout' });
+    expect(listAfterLogout.status).toBe(401);
+  });
+
+  it('debe retornar HTTP 400 si no se envía refresh token ni token de autorización a revocar', async () => {
+    const res = await request(app).post('/api/auth/logout').send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+// Integración: Tarea Asíncrona en Background (Worker Thread) y Notificación SSE (HU28)
+describe('GET /api/lists/:id/events - Tarea asíncrona en background y notificación SSE (HU28)', () => {
+  let token: string;
+  let otherToken: string;
+
+  beforeAll(async () => {
+    const user = {
+      username: 'userSseHU28',
+      email: 'sse.hu28@example.com',
+      password: 'password123',
+    };
+    const other = {
+      username: 'otherSseHU28',
+      email: 'othersse.hu28@example.com',
+      password: 'password123',
+    };
+
+    await request(app).post('/api/auth/register').send(user);
+    await request(app).post('/api/auth/register').send(other);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: user.email, password: user.password });
+    token = loginRes.body.token;
+
+    const otherLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: other.email, password: other.password });
+    otherToken = otherLogin.body.token;
+  });
+
+  it('al cambiar a CONFIRMADA, debe disparar la tarea asíncrona en segundo plano y emitir el resultado por el canal SSE (text/event-stream)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista con procesamiento paralelo y SSE' });
+
+    const listId = createRes.body.id;
+
+    // 1. Cambiar estado a CONFIRMADA (dispara el Worker Thread en background)
+    const confirmRes = await request(app)
+      .patch(`/api/lists/${listId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'CONFIRMADA' });
+
+    expect(confirmRes.status).toBe(200);
+    expect(confirmRes.body.status).toBe('CONFIRMADA');
+
+    // 2. Conectarse al canal SSE GET /api/lists/:id/events y recibir el evento emitido
+    const sseRes = await request(app)
+      .get(`/api/lists/${listId}/events`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(sseRes.status).toBe(200);
+    expect(sseRes.headers['content-type']).toContain('text/event-stream');
+    expect(sseRes.text).toContain('event: connected');
+    expect(sseRes.text).toContain('event: list_processed');
+    expect(sseRes.text).toContain(listId);
+    expect(sseRes.text).toContain('Worker Thread');
+  });
+
+  it('debe rechazar con HTTP 403 si un usuario no propietario intenta suscribirse al canal SSE de la lista', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Lista SSE privada' });
+
+    const listId = createRes.body.id;
+
+    const forbiddenRes = await request(app)
+      .get(`/api/lists/${listId}/events`)
+      .set('Authorization', `Bearer ${otherToken}`);
+
+    expect(forbiddenRes.status).toBe(403);
+  });
+});
+
+// Contenerización con Docker y Docker Compose (HU29)
+describe('Contenerización End-to-End con Dockerfile y Docker Compose (HU29)', () => {
+  const rootDir = process.cwd();
+
+  it('debe existir un Dockerfile optimizado con multi-stage build para Node.js y compilación TypeScript', () => {
+    const dockerfilePath = path.join(rootDir, 'Dockerfile');
+    expect(fs.existsSync(dockerfilePath)).toBe(true);
+
+    const content = fs.readFileSync(dockerfilePath, 'utf8');
+    expect(content).toContain('FROM node:20-slim AS builder');
+    expect(content).toContain('FROM node:20-slim AS production');
+    expect(content).toContain('npm run build');
+    expect(content).toContain('EXPOSE 3000');
+  });
+
+  it('debe existir docker-compose.yml orquestando el servicio del backend y su volumen de persistencia', () => {
+    const composePath = path.join(rootDir, 'docker-compose.yml');
+    expect(fs.existsSync(composePath)).toBe(true);
+
+    const content = fs.readFileSync(composePath, 'utf8');
+    expect(content).toContain('repar-tir-backend:');
+    expect(content).toContain('3000:3000');
+    expect(content).toContain('volumes:');
+    expect(content).toContain('repar_tir_sqlite_data');
+  });
+
+  it('debe incluir en README.md la instrucción docker compose up --build', () => {
+    const readmePath = path.join(rootDir, 'README.md');
+    const content = fs.readFileSync(readmePath, 'utf8');
+    expect(content).toContain('docker compose up --build');
+  });
+});
+
+// Frontend: Interfaz Web de Usuario en carpeta separada frontend/ (HU30)
+describe('Interfaz Web Frontend en carpeta frontend/ servida vía Express (HU30)', () => {
+  const rootDir = process.cwd();
+
+  it('debe existir la carpeta separada frontend/ con index.html, styles.css y app.js', () => {
+    expect(fs.existsSync(path.join(rootDir, 'frontend', 'index.html'))).toBe(true);
+    expect(fs.existsSync(path.join(rootDir, 'frontend', 'styles.css'))).toBe(true);
+    expect(fs.existsSync(path.join(rootDir, 'frontend', 'app.js'))).toBe(true);
+  });
+
+  it('debe servir la interfaz web en GET /app con los controles de autenticación, listas, Idempotency-Key, estados y SSE', async () => {
+    const res = await request(app).get('/app');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.text).toContain('Repar-Tir');
+    expect(res.text).toContain('Idempotency-Key');
+    expect(res.text).toContain('BORRADOR');
+    expect(res.text).toContain('CONFIRMADA');
+    expect(res.text).toContain('ELIMINADA');
+  });
+});
+
+// Colección Bruno para Evaluación Docente (HU31)
+describe('Colección Bruno para Evaluación Docente (HU31)', () => {
+  const evalDir = path.resolve(process.cwd(), 'bruno', 'Evaluacion-Docente');
+
+  it('debe existir el directorio bruno/Evaluacion-Docente con los 8 escenarios de prueba exigidos por la cátedra', () => {
+    expect(fs.existsSync(evalDir)).toBe(true);
+
+    const expectedFiles = [
+      '1. Rechazo Fuerza Bruta (429).bru',
+      '2. Rechazo Token Expirado (401).bru',
+      '3. Proteccion IDOR Usuario No Propietario (403).bru',
+      '4. Idempotencia Creacion Lista (Idempotency-Key).bru',
+      '5. Transicion Invalida 1 - ELIMINADA a BORRADOR (400).bru',
+      '6. Transicion Invalida 2 - ELIMINADA a CONFIRMADA (400).bru',
+      '7. Transicion Invalida 3 - CONFIRMADA a BORRADOR (400).bru',
+      '8. Cierre de Sesion y Revocacion (Logout).bru',
+    ];
+
+    for (const fileName of expectedFiles) {
+      const fullPath = path.join(evalDir, fileName);
+      expect(fs.existsSync(fullPath)).toBe(true);
+      const content = fs.readFileSync(fullPath, 'utf8');
+      expect(content).toContain('tests {');
+      expect(content).toContain('docs {');
+    }
+  });
+});
+
+
+// Gestión de Ítems, Cantidad de Personas y Cálculo de Gastos (HU32 y HU33)
+describe('Gestión de Ítems, Cantidad de Personas y Cálculo de Gastos (HU32 y HU33)', () => {
+  let tokenUserA: string;
+  let tokenUserB: string;
+
+  beforeAll(async () => {
+    // Registrar y loguear dos usuarios para pruebas y verificación IDOR
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioGastosA',
+      email: 'gastos.a@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginA = await request(app).post('/api/auth/login').send({
+      email: 'gastos.a@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenUserA = loginA.body.token;
+
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioGastosB',
+      email: 'gastos.b@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginB = await request(app).post('/api/auth/login').send({
+      email: 'gastos.b@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenUserB = loginB.body.token;
+  });
+
+  it('debe crear una lista con cantidad de personas y calcular totalAmount y amountPerPerson correctamente', async () => {
+    const res = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Asado con 4 amigos',
+        participantsCount: 4,
+        items: [
+          { name: 'Carne', price: 15000, quantity: 1 },
+          { name: 'Bebidas', price: 2500, quantity: 2 },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.participantsCount).toBe(4);
+    expect(res.body.items).toHaveLength(2);
+    // 15000 + (2500 * 2) = 20000; 20000 / 4 = 5000
+    expect(res.body.totalAmount).toBe(20000);
+    expect(res.body.amountPerPerson).toBe(5000);
+  });
+
+  it('debe rechazar la creación si participantsCount es menor a 1 o no es un entero', async () => {
+    const resNegative = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista inválida',
+        participantsCount: 0,
+      });
+
+    expect(resNegative.status).toBe(400);
+
+    const resFloat = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista inválida decimal',
+        participantsCount: 3.5,
+      });
+
+    expect(resFloat.status).toBe(400);
+  });
+
+  it('debe permitir agregar un ítem dinámicamente con POST /api/lists/:id/items y recalcular los totales', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista dinámica para agregar ítems',
+        participantsCount: 2,
+      });
+
+    const listId = createRes.body.id;
+    expect(createRes.body.totalAmount).toBe(0);
+
+    const addItemRes = await request(app)
+      .post(`/api/lists/${listId}/items`)
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        name: 'Carbón vegetal',
+        price: 3000,
+        quantity: 2,
+      });
+
+    expect(addItemRes.status).toBe(201);
+    expect(addItemRes.body.items).toHaveLength(1);
+    expect(addItemRes.body.items[0].subtotal).toBe(6000);
+    expect(addItemRes.body.totalAmount).toBe(6000);
+    expect(addItemRes.body.amountPerPerson).toBe(3000);
+  });
+
+  it('debe permitir actualizar un ítem con PUT /api/lists/:id/items/:itemId y recalcular el total', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista para editar ítem',
+        participantsCount: 2,
+        items: [{ name: 'Pan de campo', price: 1000, quantity: 1 }],
+      });
+
+    const listId = createRes.body.id;
+    const itemId = createRes.body.items[0].id;
+
+    const updateItemRes = await request(app)
+      .put(`/api/lists/${listId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        price: 1500,
+        quantity: 4,
+      });
+
+    expect(updateItemRes.status).toBe(200);
+    // 1500 * 4 = 6000; 6000 / 2 = 3000
+    expect(updateItemRes.body.totalAmount).toBe(6000);
+    expect(updateItemRes.body.amountPerPerson).toBe(3000);
+  });
+
+  it('debe permitir eliminar un ítem con DELETE /api/lists/:id/items/:itemId y recalcular', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista para borrar ítem',
+        participantsCount: 2,
+        items: [
+          { name: 'Helado', price: 5000, quantity: 1 },
+          { name: 'Servilletas', price: 1000, quantity: 1 },
+        ],
+      });
+
+    const listId = createRes.body.id;
+    const itemIdToDelete = createRes.body.items[1].id;
+
+    const deleteItemRes = await request(app)
+      .delete(`/api/lists/${listId}/items/${itemIdToDelete}`)
+      .set('Authorization', `Bearer ${tokenUserA}`);
+
+    expect(deleteItemRes.status).toBe(200);
+    expect(deleteItemRes.body.items).toHaveLength(1);
+    expect(deleteItemRes.body.totalAmount).toBe(5000);
+    expect(deleteItemRes.body.amountPerPerson).toBe(2500);
+  });
+
+  it('debe proteger contra IDOR al intentar agregar o modificar ítems de una lista ajena (HTTP 403)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Lista protegida de usuario A',
+        participantsCount: 3,
+        items: [{ name: 'Secreto A', price: 1000, quantity: 1 }],
+      });
+
+    const listId = createRes.body.id;
+    const itemId = createRes.body.items[0].id;
+
+    const idorAddRes = await request(app)
+      .post(`/api/lists/${listId}/items`)
+      .set('Authorization', `Bearer ${tokenUserB}`)
+      .send({ name: 'Inyección ajena', price: 9999, quantity: 1 });
+
+    expect(idorAddRes.status).toBe(403);
+
+    const idorUpdateRes = await request(app)
+      .put(`/api/lists/${listId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${tokenUserB}`)
+      .send({ price: 1 });
+
+    expect(idorUpdateRes.status).toBe(403);
+
+    const idorDeleteRes = await request(app)
+      .delete(`/api/lists/${listId}/items/${itemId}`)
+      .set('Authorization', `Bearer ${tokenUserB}`);
+
+    expect(idorDeleteRes.status).toBe(403);
+  });
+});
+
+// Papelera de Reciclaje (Soft Delete), Restauración y Purga tras 30 Días (HU34 y HU35)
+describe('Papelera de Reciclaje (Soft Delete), Restauración y Purga tras 30 Días (HU34 y HU35)', () => {
+  let tokenUser: string;
+  let tokenOther: string;
+
+  beforeAll(async () => {
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioPapelera1',
+      email: 'papelera1@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginRes = await request(app).post('/api/auth/login').send({
+      email: 'papelera1@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenUser = loginRes.body.token;
+
+    await request(app).post('/api/auth/register').send({
+      username: 'usuarioPapelera2',
+      email: 'papelera2@example.com',
+      password: 'passwordSeguro123',
+    });
+    const loginOtherRes = await request(app).post('/api/auth/login').send({
+      email: 'papelera2@example.com',
+      password: 'passwordSeguro123',
+    });
+    tokenOther = loginOtherRes.body.token;
+  });
+
+  it('al borrar una lista con DELETE /api/lists/:id debe ir a la papelera (soft delete) y desaparecer de search', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista que irá a la papelera' });
+
+    const listId = createRes.body.id;
+
+    // Enviar a papelera
+    const deleteRes = await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(deleteRes.status).toBe(200);
+
+    // Verificar que ya no aparece en la búsqueda activa
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ search: 'Lista que irá a la papelera' });
+
+    expect(searchRes.status).toBe(200);
+    const foundInActive = searchRes.body.lists.find((l: { id: string }) => l.id === listId);
+    expect(foundInActive).toBeUndefined();
+
+    // Verificar que SÍ aparece en la papelera
+    const trashRes = await request(app)
+      .get('/api/lists/trash')
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(trashRes.status).toBe(200);
+    const foundInTrash = trashRes.body.find((l: { id: string }) => l.id === listId);
+    expect(foundInTrash).toBeDefined();
+    expect(foundInTrash).toHaveProperty('daysRemaining');
+    expect(foundInTrash.daysRemaining).toBeLessThanOrEqual(30);
+  });
+
+  it('debe permitir restaurar una lista desde la papelera con POST /api/lists/:id/restore y volver a figurar en search', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista para restaurar' });
+
+    const listId = createRes.body.id;
+
+    // Enviar a papelera
+    await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    // Restaurar desde papelera
+    const restoreRes = await request(app)
+      .post(`/api/lists/${listId}/restore`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(restoreRes.status).toBe(200);
+    expect(restoreRes.body.id).toBe(listId);
+    expect(restoreRes.body.deletedAt).toBeNull();
+
+    // Comprobar que vuelve a estar activa
+    const searchRes = await request(app)
+      .post('/api/lists/search')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ search: 'Lista para restaurar' });
+
+    expect(searchRes.status).toBe(200);
+    const restoredFound = searchRes.body.lists.find((l: { id: string }) => l.id === listId);
+    expect(restoredFound).toBeDefined();
+  });
+
+  it('debe rechazar con HTTP 403 Forbidden si otro usuario intenta restaurar una lista ajena', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista privada de User 1 en papelera' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    const idorRestoreRes = await request(app)
+      .post(`/api/lists/${listId}/restore`)
+      .set('Authorization', `Bearer ${tokenOther}`);
+
+    expect(idorRestoreRes.status).toBe(403);
+  });
+
+  it('debe purgar definitivamente de la BD listas con más de 30 días en la papelera vía DELETE /api/lists/trash/purge', async () => {
+    // Crear lista directamente simulando fecha deletedAt de hace 35 días
+    const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+
+    const oldList = await prisma.list.create({
+      data: {
+        title: 'Lista antigua expirada de hace 35 días',
+        userId: (await prisma.user.findFirst({ where: { email: 'papelera1@example.com' } }))!.id,
+        deletedAt: thirtyFiveDaysAgo,
+      },
+    });
+
+    // Ejecutar purga de 30 días
+    const purgeRes = await request(app)
+      .delete('/api/lists/trash/purge?days=30')
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(purgeRes.status).toBe(200);
+    expect(purgeRes.body.purgedCount).toBeGreaterThanOrEqual(1);
+
+    // Verificar que ya no existe físicamente en Prisma
+    const physicallyDeleted = await prisma.list.findUnique({
+      where: { id: oldList.id },
+    });
+    expect(physicallyDeleted).toBeNull();
+  });
+});
+
+// Verificación de Frontend y Colección Bruno (HU36 y HU37)
+describe('Frontend y Colección de Bruno para Ítems y Papelera (HU36 y HU37)', () => {
+  const rootDir = process.cwd();
+
+  it('el frontend web debe incluir controles para participantes, ítems y papelera con retención de 30 días', () => {
+    const htmlPath = path.join(rootDir, 'frontend', 'index.html');
+    const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+
+    expect(htmlContent).toContain('participantsCount');
+    expect(htmlContent).toContain('Papelera de Reciclaje');
+    expect(htmlContent).toContain('30 Días');
+
+    const jsPath = path.join(rootDir, 'frontend', 'app.js');
+    const jsContent = fs.readFileSync(jsPath, 'utf8');
+
+    expect(jsContent).toContain('loadTrash');
+    expect(jsContent).toContain('restoreFromTrash');
+    expect(jsContent).toContain('addItemToList');
+    expect(jsContent).toContain('amountPerPerson');
+  });
+
+  it('deben existir los archivos de Bruno para Items-y-Gastos y Papelera', () => {
+    const itemsDir = path.join(rootDir, 'bruno', 'Items-y-Gastos');
+    const trashDir = path.join(rootDir, 'bruno', 'Papelera');
+
+    expect(fs.existsSync(path.join(itemsDir, '1. Crear Lista con Participantes e Items.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(itemsDir, '2. Agregar Item a Lista.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(itemsDir, '3. Actualizar Item de Lista.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(itemsDir, '4. Eliminar Item de Lista.bru'))).toBe(true);
+
+    expect(fs.existsSync(path.join(trashDir, '1. Enviar Lista a Papelera (Soft Delete).bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '2. Consultar Listas en Papelera.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '3. Restaurar Lista de Papelera.bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '4. Purgar Listas Expiradas (30 Dias).bru'))).toBe(true);
+    expect(fs.existsSync(path.join(trashDir, '5. Proteccion IDOR Restaurar Lista Ajena (403).bru'))).toBe(true);
+  });
+});

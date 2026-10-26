@@ -1,130 +1,146 @@
 import { Request, Response } from 'express';
-import { ListModel } from '../models/list.model.js';
+import { ListService } from '../services/list.service.js';
+import { SseService } from '../services/sse.service.js';
+
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id?: string;
+    userId?: string;
+  };
+}
 
 export class ListController {
   static async create(req: Request, res: Response): Promise<void> {
-    const { title } = req.body;
+    const { title, participantsCount, items } = req.body;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || 'usuario-autenticado-id';
+    const idempotencyKey =
+      req.header('Idempotency-Key') || req.header('X-Idempotency-Key') || undefined;
 
-    // 1. Validar presencia del título
-    if (title === undefined || title === null) {
-      res.status(400).json({ message: 'El título de la lista es obligatorio' });
-      return;
-    }
+    const result = await ListService.create(userId, title, idempotencyKey, participantsCount, items);
+    res.status(result.status).json(result.data);
+  }
 
-    // 2. Validar que no sea cadena vacía ni contenga solo espacios
-    if (typeof title !== 'string' || title.trim() === '') {
-      res.status(400).json({ message: 'El título de la lista no puede estar vacío' });
-      return;
-    }
+  static async getById(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
 
-    // 3. Validar longitud máxima
-    if (title.length > 255) {
-      res.status(400).json({ message: 'El título excede la longitud máxima permitida (255 caracteres)' });
-      return;
-    }
+    const result = await ListService.getById(id, userId);
+    res.status(result.status).json(result.data);
+  }
 
-    // 4. Obtener el ID del usuario autenticado desde el middleware
-    const userId = (req as any).user?.id || 'usuario-autenticado-id';
+  static async getTrash(req: Request, res: Response): Promise<void> {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || 'usuario-autenticado-id';
 
-    // 5. Crear la lista y retornar respuesta 201 Created
-    const newList = await ListModel.create({ title, userId });
+    const result = await ListService.getTrash(userId);
+    res.status(result.status).json(result.data);
+  }
 
-    res.status(201).json(newList);
+  static async purgeTrash(req: Request, res: Response): Promise<void> {
+    const days = req.query.days ? Number(req.query.days) : 30;
+    const result = await ListService.purgeExpiredTrash(days);
+    res.status(result.status).json(result.data);
+  }
+
+  static async restore(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.restore(id, userId);
+    res.status(result.status).json(result.data);
   }
 
   static async update(req: Request, res: Response): Promise<void> {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
-    const { title } = req.body;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
 
-    // 1. Consultar el recurso en la BD antes de modificar para identificar al propietario (HU #16 - IDOR)
-    const list = await ListModel.findById(id);
-    if (!list) {
-      res.status(404).json({ message: 'Lista no encontrada' });
+    const result = await ListService.update(id, userId, req.body);
+    res.status(result.status).json(result.data);
+  }
+
+  static async addItem(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.addItem(id, userId, req.body);
+    res.status(result.status).json(result.data);
+  }
+
+  static async updateItem(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const rawItemId = req.params.itemId;
+    const itemId = Array.isArray(rawItemId) ? rawItemId[0] : rawItemId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.updateItem(id, itemId, userId, req.body);
+    res.status(result.status).json(result.data);
+  }
+
+  static async deleteItem(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const rawItemId = req.params.itemId;
+    const itemId = Array.isArray(rawItemId) ? rawItemId[0] : rawItemId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.deleteItem(id, itemId, userId);
+    res.status(result.status).json(result.data);
+  }
+
+  static async updateStatus(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { status } = req.body;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.updateStatus(id, userId, status);
+    res.status(result.status).json(result.data);
+  }
+
+  static async streamEvents(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.getForEvents(id, userId);
+    if (result.status !== 200) {
+      res.status(result.status).json(result.data);
       return;
     }
 
-    // 2. Comparar el identificador del propietario con el ID del usuario autenticado desde el JWT (HU #16 - IDOR)
-    const userId = (req as any).user?.id || (req as any).user?.userId;
-    if (!userId || list.userId !== userId) {
-      res.status(403).json({ message: 'No tienes permiso para editar esta lista' });
-      return;
-    }
-
-    // 3. Validar presencia y formato del título
-    if (title === undefined || title === null) {
-      res.status(400).json({ message: 'El título es obligatorio' });
-      return;
-    }
-
-    if (typeof title !== 'string' || title.trim() === '') {
-      res.status(400).json({ message: 'El título no puede estar vacío' });
-      return;
-    }
-
-    if (title.length > 255) {
-      res.status(400).json({ message: 'El título excede la longitud máxima permitida' });
-      return;
-    }
-
-    // 4. Actualizar datos y responder 200 OK
-    const updatedList = await ListModel.update(id, { title });
-    res.status(200).json(updatedList);
+    SseService.subscribe(id, res);
   }
 
   static async delete(req: Request, res: Response): Promise<void> {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id;
 
-    // 1. Validar si la lista existe
-    const list = await ListModel.findById(id);
-    if (!list) {
-      res.status(404).json({ message: 'Lista no encontrada' });
-      return;
-    }
-
-    // 2. Validar que la lista pertenezca al usuario autenticado
-    const userId = (req as any).user?.id;
-    if (list.userId !== userId) {
-      res.status(403).json({ message: 'No tienes permiso para eliminar esta lista' });
-      return;
-    }
-
-    // 3. Eliminar la lista
-    await ListModel.delete(id);
-
-    // 4. Responder con 200 OK
-    res.status(200).json({ message: 'Lista eliminada correctamente' });
+    const result = await ListService.delete(id, userId);
+    res.status(result.status).json(result.data);
   }
 
   static async search(req: Request, res: Response): Promise<void> {
-    const { search, page, limit } = req.body;
+    const { search, page, limit, includeDeleted } = req.body;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || 'usuario-autenticado-id';
 
-    // 1. Validar parámetros de paginación
-    if (page !== undefined && (typeof page !== 'number' || page < 1)) {
-      res.status(400).json({ message: 'El parámetro page debe ser un número entero mayor a 0' });
-      return;
-    }
-
-    if (limit !== undefined && (typeof limit !== 'number' || limit < 1)) {
-      res.status(400).json({ message: 'El parámetro limit debe ser un número entero mayor a 0' });
-      return;
-    }
-
-    // 2. Obtener userId del usuario autenticado
-    const userId = (req as any).user?.id || 'usuario-autenticado-id';
-
-    // 3. Ejecutar consulta sobre listas del usuario
-    const result = await ListModel.search(userId, { search, page, limit });
-
-    // 4. Responder 200 OK con listas y paginación
-    res.status(200).json({
-      lists: result.lists,
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-      },
-    });
+    const result = await ListService.search(userId, { search, page, limit, includeDeleted });
+    res.status(result.status).json(result.data);
   }
 }

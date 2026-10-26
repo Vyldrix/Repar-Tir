@@ -1,0 +1,61 @@
+meta {
+  name: 1. Crear Lista con Participantes e Items
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/lists
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "title": "Asado Fin de Semana con Amigos",
+    "participantsCount": 4,
+    "items": [
+      {
+        "name": "Carne Vacuna",
+        "price": 20000,
+        "quantity": 1
+      },
+      {
+        "name": "Bebidas y Gaseosas",
+        "price": 4000,
+        "quantity": 2
+      }
+    ]
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("listId", res.body.id);
+  }
+}
+
+tests {
+  test("Debe responder con HTTP 201 Created", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("Debe calcular totalAmount y amountPerPerson correctamente", function() {
+    expect(res.getBody()).to.have.property("totalAmount");
+    expect(res.getBody()).to.have.property("amountPerPerson");
+    expect(res.getBody().participantsCount).to.equal(4);
+    expect(res.getBody().totalAmount).to.equal(28000);
+    expect(res.getBody().amountPerPerson).to.equal(7000);
+  });
+}
+
+docs {
+  # Crear Lista con Participantes e Ítems
+  Crea una lista especificando la cantidad de personas a repartir y una lista inicial de ítems con precio y cantidad.
+  El backend calcula automáticamente `totalAmount` y `amountPerPerson`.
+}

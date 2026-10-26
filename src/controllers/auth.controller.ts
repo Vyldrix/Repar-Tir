@@ -184,11 +184,33 @@ export class AuthController {
 
   static async revoke(req: Request, res: Response): Promise<void> {
     const refreshToken = req.body?.refreshToken || req.body?.token;
-    if (!refreshToken || typeof refreshToken !== 'string' || refreshToken.trim() === '') {
+    const authHeader = req.headers.authorization;
+    const accessToken =
+      authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.split(' ')[1]?.trim()
+        : undefined;
+
+    if (
+      (!refreshToken || typeof refreshToken !== 'string' || refreshToken.trim() === '') &&
+      (!accessToken || accessToken === '')
+    ) {
       res.status(400).json({ message: 'El refresh token es obligatorio' });
       return;
     }
-    RefreshTokenStore.revoke(refreshToken);
+
+    if (typeof refreshToken === 'string' && refreshToken.trim() !== '') {
+      RefreshTokenStore.revoke(refreshToken.trim());
+    }
+
+    if (accessToken) {
+      RefreshTokenStore.revokeAccessToken(accessToken);
+    }
+
     res.status(200).json({ message: 'Refresh token revocado exitosamente' });
   }
+
+  static async logout(req: Request, res: Response): Promise<void> {
+    await AuthController.revoke(req, res);
+  }
 }
+
