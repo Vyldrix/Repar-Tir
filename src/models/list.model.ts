@@ -191,6 +191,57 @@ export class ListModel {
     }
   }
 
+  static async moveToTrash(id: string): Promise<List | undefined> {
+    try {
+      const updated = await prisma.list.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      return this.mapToDto(updated);
+    } catch {
+      return undefined;
+    }
+  }
+
+  static async restore(id: string): Promise<List | undefined> {
+    try {
+      const updated = await prisma.list.update({
+        where: { id },
+        data: {
+          deletedAt: null,
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      return this.mapToDto(updated);
+    } catch {
+      return undefined;
+    }
+  }
+
+  static async findTrashByUserId(userId: string): Promise<List[]> {
+    const lists = await prisma.list.findMany({
+      where: {
+        userId,
+        deletedAt: { not: null },
+      },
+      include: {
+        items: true,
+      },
+      orderBy: { deletedAt: 'desc' },
+    });
+
+    return lists.map((l) => this.mapToDto(l));
+  }
+
   static async delete(id: string): Promise<boolean> {
     try {
       await prisma.list.delete({

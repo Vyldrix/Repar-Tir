@@ -31,6 +31,24 @@ export class ListController {
     res.status(result.status).json(result.data);
   }
 
+  static async getTrash(req: Request, res: Response): Promise<void> {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || 'usuario-autenticado-id';
+
+    const result = await ListService.getTrash(userId);
+    res.status(result.status).json(result.data);
+  }
+
+  static async restore(req: Request, res: Response): Promise<void> {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+
+    const result = await ListService.restore(id, userId);
+    res.status(result.status).json(result.data);
+  }
+
   static async update(req: Request, res: Response): Promise<void> {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;

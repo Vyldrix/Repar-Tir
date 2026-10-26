@@ -197,7 +197,7 @@ export class ListService {
     userId: string | undefined
   ): Promise<ServiceResult<List>> {
     const list = await ListModel.findById(id);
-    if (!list) {
+    if (!list || list.deletedAt) {
       return {
         status: 404,
         data: { message: 'Lista no encontrada' },
@@ -223,7 +223,7 @@ export class ListService {
     data: unknown
   ): Promise<ServiceResult<List>> {
     const list = await ListModel.findById(id);
-    if (!list) {
+    if (!list || list.deletedAt) {
       return {
         status: 404,
         data: { message: 'Lista no encontrada' },
@@ -609,7 +609,7 @@ export class ListService {
   static async delete(id: string, userId: string | undefined): Promise<ServiceResult<{ message: string }>> {
     // 1. Validar si la lista existe
     const list = await ListModel.findById(id);
-    if (!list) {
+    if (!list || list.deletedAt) {
       return {
         status: 404,
         data: { message: 'Lista no encontrada' },
@@ -624,13 +624,83 @@ export class ListService {
       };
     }
 
-    // 3. Eliminar la lista
-    await ListModel.delete(id);
+    // 3. Mover a la papelera (Soft delete)
+    await ListModel.moveToTrash(id);
 
     // 4. Responder con 200 OK
     return {
       status: 200,
-      data: { message: 'Lista eliminada correctamente' },
+      data: { message: 'Lista eliminada correctamente y enviada a la papelera' },
+    };
+  }
+
+  static async restore(id: string, userId: string | undefined): Promise<ServiceResult<List>> {
+    // 1. Validar si la lista existe
+    const list = await ListModel.findById(id);
+    if (!list) {
+      return {
+        status: 404,
+        data: { message: 'Lista no encontrada' },
+      };
+    }
+
+    // 2. Validar que pertenezca al usuario autenticado (IDOR)
+    if (!userId || list.userId !== userId) {
+      return {
+        status: 403,
+        data: { message: 'No tienes permiso para restaurar esta lista' },
+      };
+    }
+
+    // 3. Validar que la lista esté efectivamente en la papelera
+    if (!list.deletedAt) {
+      return {
+        status: 400,
+        data: { message: 'La lista no se encuentra en la papelera' },
+      };
+    }
+
+    // 4. Restaurar lista
+    const restored = await ListModel.restore(id);
+    if (!restored) {
+      return {
+        status: 404,
+        data: { message: 'Lista no encontrada' },
+      };
+    }
+
+    return {
+      status: 200,
+      data: restored,
+    };
+  }
+
+  static async getTrash(userId: string): Promise<ServiceResult<TrashListSummary[]>> {
+    const lists = await ListModel.findTrashByUserId(userId);
+    const now = Date.now();
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+    const trashSummaries: TrashListSummary[] = lists.map((l) => {
+      const deletedTime = l.deletedAt ? new Date(l.deletedAt).getTime() : now;
+      const daysInTrash = Math.floor((now - deletedTime) / MS_PER_DAY);
+      const daysRemaining = Math.max(0, 30 - daysInTrash);
+
+      return {
+        id: l.id,
+        title: l.title,
+        status: l.status,
+        participantsCount: l.participantsCount,
+        totalAmount: l.totalAmount,
+        amountPerPerson: l.amountPerPerson,
+        deletedAt: l.deletedAt || new Date().toISOString(),
+        daysInTrash,
+        daysRemaining,
+      };
+    });
+
+    return {
+      status: 200,
+      data: trashSummaries,
     };
   }
 
