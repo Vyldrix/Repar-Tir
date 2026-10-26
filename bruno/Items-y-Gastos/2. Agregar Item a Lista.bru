@@ -1,0 +1,48 @@
+meta {
+  name: 2. Agregar Item a Lista
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/lists/{{listId}}/items
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "name": "Carbón y Fósforos",
+    "price": 2000,
+    "quantity": 1
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.items && res.body.items.length > 0) {
+    const lastItem = res.body.items[res.body.items.length - 1];
+    bru.setEnvVar("itemId", lastItem.id);
+  }
+}
+
+tests {
+  test("Debe responder con HTTP 201 Created", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("Debe recalcular el total con el nuevo ítem incorporado", function() {
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().totalAmount).to.be.a("number");
+    expect(res.getBody().amountPerPerson).to.be.a("number");
+  });
+}
+
+docs {
+  # Agregar Ítem a una Lista Existente
+  Incorpora un ítem a la lista indicada por `listId`, recalculando el total y el costo por participante.
+}

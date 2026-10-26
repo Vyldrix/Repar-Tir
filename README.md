@@ -7,18 +7,19 @@
 ![Prisma](https://img.shields.io/badge/Prisma-6.19.3-2D3748?style=for-the-badge&logo=prisma&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Vitest-5.0.1-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Bruno](https://img.shields.io/badge/Bruno-Collection-FF6C37?style=for-the-badge)
 
-API RESTful modular y blindada desarrollada con **Node.js**, **Express 5** y **TypeScript**, orientada a la gestión de cuentas de usuario, autenticación JWT con refresh tokens, control de acceso basado en roles (RBAC), seguridad perimetral contra inyecciones y administración de listas personales con aislamiento estricto de recursos.
+Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **TypeScript** orientada a la **gestión, cálculo y reparto equitativo de gastos** entre múltiples personas, administración de ítems con cantidades y precios, ciclo de vida con **papelera de reciclaje (soft delete)**, autenticación JWT con refresh tokens, control de acceso basado en roles (RBAC), seguridad multicapa contra inyecciones y frontend web interactivo servido en `/app`.
 
 ---
 
 ## 📋 Resumen del Proyecto
 
-- **¿Qué es?** Un backend desacoplado de alto rendimiento y seguridad multicapa para autenticación, gestión de sesiones y control de listas de recursos.
-- **¿Qué problema resuelve?** Centraliza la persistencia relacional y el acceso seguro a listas privadas, mitigando vulnerabilidades críticas de OWASP (IDOR, SQLi, NoSQLi, XSS, Prototype Pollution, Brute Force).
-- **¿Para quién está pensado?** Aplicaciones cliente (web SPA o móviles) y desarrolladores que consuman servicios REST protegidos por JWT.
-- **Estado actual:** 🟢 **Backend completo y robustecido** con las 20 Historias de Usuario (HU01 a HU20) implementadas y probadas en el repositorio.
+- **¿Qué es?** Un backend desacoplado y robustecido para gestionar eventos y listas de gastos compartidos (asados, viajes, compras grupales) calculando automáticamente el costo consolidado y la división equitativa por participante.
+- **¿Qué problema resuelve?** Elimina la complejidad del cálculo de gastos grupales, garantiza la retención segura de datos con papelera de reciclaje y recuperación de 30 días, y mitiga vulnerabilidades críticas de OWASP (IDOR, SQLi, NoSQLi, XSS, Prototype Pollution, Brute Force).
+- **¿Para quién está pensado?** Grupos de personas que comparten gastos, aplicaciones cliente web o móviles y evaluadores que consuman servicios REST protegidos por JWT.
+- **Estado actual:** 🟢 **100% Funcional y Probado** con las **38 Historias de Usuario (HU01 a HU38)** implementadas, documentadas y validadas con 78 tests automatizados.
 
 ---
 
@@ -26,29 +27,37 @@ API RESTful modular y blindada desarrollada con **Node.js**, **Express 5** y **T
 
 ### 🟢 IMPLEMENTADO
 - **Salud del Sistema:** Endpoint `GET /api/health` para monitorización de disponibilidad.
-- **Registro de Usuarios:** `POST /api/auth/register` con validación estricta de unicidad y hash no reversible con **Bcrypt** (10 salt rounds).
-- **Inicio de Sesión:** `POST /api/auth/login` por correo o nombre de usuario, emitiendo access token JWT y refresh token.
-- **Rotación de Tokens:** `POST /refresh` (y `POST /api/refresh`) para renovación de credenciales sin reintroducir contraseñas.
-- **Revocación:** Mecanismo en memoria para invalidar refresh tokens comprometidos.
-- **Creación de Listas:** `POST /api/lists` vinculadas automáticamente al usuario autenticado.
-- **Búsqueda y Paginación:** `POST /api/lists/search` con filtrado por texto (`search`) y paginación (`page`, `limit`).
-- **Edición y Borrado Seguro:** `PUT /api/lists/:id` y `DELETE /api/lists/:id` con verificación de titularidad y mitigación estricta contra **IDOR** (rechazo con HTTP 403 ante listas ajenas).
-- **Middleware `requireAuth`:** Validación de tokens JWT y rechazo de peticiones no autorizadas (HTTP 401).
-- **Factoría `requireRole`:** Middleware configurable para autorizaciones por rol (HTTP 403).
-- **Rate Limiting Multicapa:**
-  - Límite global: 100 req/min por IP.
-  - Límite dedicado a Login: 5 intentos cada 15 min por IP/usuario con extensión por reincidencia y registro de auditoría (`rateLimitAuditLogs`).
-- **Sanitización de Entradas:** Detección de patrones SQL Injection, operadores NoSQL (`$`), escape HTML contra XSS, rechazo de Null Bytes y protección contra Prototype Pollution (`__proto__`).
-- **Cabeceras HTTP y CORS:** HSTS (`max-age=31536000`), `nosniff`, `DENY` y política CORS con lista blanca de orígenes.
-- **Persistencia Relacional:** Prisma ORM sobre SQLite con borrado en cascada e índices en `userId`.
-- **Colección Bruno:** Especificación completa de requests en la carpeta `bruno/` para pruebas manuales y automatizadas.
+- **Registro y Autenticación:** `POST /api/auth/register` (hash Bcrypt con 10 salt rounds) y `POST /api/auth/login` emitiendo Access Token y Refresh Token.
+- **Rotación y Revocación de Tokens:** `POST /refresh` (renovación) y `POST /api/auth/logout` (revocación comprobable en memoria).
+- **Gestión de Listas y Participantes (HU32 y HU33):**
+  - Creación y edición de listas vinculadas al usuario autenticado con conteo de participantes (`participantsCount >= 1`).
+  - Búsqueda y paginación con `POST /api/lists/search` (`page`, `limit`, filtrado por texto).
+  - Consulta de lista individual por ID con `GET /api/lists/:id`.
+- **Cálculo y Reparto Automático de Gastos (HU33):**
+  - CRUD de ítems subordinados: `POST /api/lists/:id/items`, `PUT /api/lists/:id/items/:itemId`, `DELETE /api/lists/:id/items/:itemId`.
+  - Cada ítem almacena `name`, `price`, `quantity` y `subtotal` ($price \times quantity$).
+  - Cálculo consolidado en tiempo real: `totalAmount` ($\sum subtotales$) y `amountPerPerson` ($\frac{totalAmount}{participantsCount}$).
+- **Papelera de Reciclaje y Restauración (HU34 y HU35):**
+  - **Soft Delete:** `DELETE /api/lists/:id` envía la lista a la papelera registrando `deletedAt`. La lista deja de figurar en búsquedas activas.
+  - **Consulta de Papelera:** `GET /api/lists/trash` informa listas eliminadas, fecha y días restantes de retención (30 días).
+  - **Restauración:** `POST /api/lists/:id/restore` restituye la lista (`deletedAt = null`) a las listas activas.
+  - **Purga Definitiva (30 días):** Tarea automática periódica y endpoint `DELETE /api/lists/trash/purge?days=30` que destruye físicamente de la base de datos registros con más de 30 días en papelera.
+- **Máquina de Estados de Lista (HU23, HU24, HU25):** Flujo `BORRADOR ➔ CONFIRMADA ➔ ELIMINADA` con rechazo HTTP 400 ante transiciones prohibidas.
+- **Idempotencia Operativa (HU26):** Soporte de cabecera `Idempotency-Key` en `POST /api/lists` para evitar creaciones duplicadas.
+- **Procesamiento Asíncrono y SSE (HU28):** Tarea pesada en Worker Thread secundario y canal Server-Sent Events en `GET /api/lists/:id/events`.
+- **Interfaz Web Frontend en `/app` (HU30 y HU36):**
+  - Servida estáticamente desde la carpeta `frontend/`.
+  - Formularios de autenticación, creación de listas con personas e ítems dinámicos.
+  - Tarjetas con cuadro financiero en vivo y desglose de ítems.
+  - Pestañas entre **Listas Activas** y **Papelera de Reciclaje** con contador regresivo y botón de restauración inmediata.
+- **Seguridad Multicapa y Anti-IDOR:**
+  - Mitigación IDOR en todos los endpoints de listas, ítems y papelera (HTTP 403 Forbidden).
+  - Sanitización estricta (SQLi, NoSQLi, XSS, Prototype Pollution y Null Bytes).
+  - Rate limiting global (100 req/min) y dedicado a login (5 intentos / 15 min).
+  - Cabeceras de seguridad HSTS (`max-age=31536000`), `nosniff`, `DENY` y CORS con whitelist.
+- **Contenerización Docker y Docker Compose (HU29):** Multi-stage build con volumen de datos SQLite persistente.
+- **Colección Bruno (HU20, HU31, HU37):** Requests estructuradas con assertions y docs en `bruno/` para todos los módulos.
 - **CI Automatizado:** GitHub Actions ejecutando linter, typechecking, tests y build sobre Node.js 20.x y 22.x.
-
-### 🔵 PLANIFICADO
-- Interfaz gráfica de usuario (Frontend web/móvil) [POR DEFINIR].
-- Modelado de ítems o tareas internas dentro de cada lista (`ListItem`) [POR DEFINIR].
-- Soporte para base de datos cliente/servidor para producción (PostgreSQL/MySQL) [POR DEFINIR].
-- Contenerización mediante Docker y Docker Compose [POR DEFINIR].
 
 ---
 
@@ -59,8 +68,9 @@ API RESTful modular y blindada desarrollada con **Node.js**, **Express 5** y **T
 - **Framework Web:** Express 5.2.1
 - **Seguridad:** Bcrypt 6.0.0, crypto nativo, CORS 2.8.6
 - **ORM & Base de Datos:** Prisma 6.19.3 con motor SQLite
-- **Testing:** Vitest 5.0.1, Supertest 7.2.2 y @vitest/coverage-v8
+- **Testing:** Vitest 5.0.2, Supertest 7.2.2 y @vitest/coverage-v8 (78 tests)
 - **Calidad de Código:** ESLint 10.11.0 con typescript-eslint
+- **Contenedores:** Dockerfile multi-stage y Docker Compose
 - **Cliente API:** Colección de Bruno v1
 
 ---
@@ -69,31 +79,41 @@ API RESTful modular y blindada desarrollada con **Node.js**, **Express 5** y **T
 
 ```text
 repar-tir/
-├── .github/workflows/    # Pipeline de CI (ci.yml)
-├── bruno/                # Colección oficial de endpoints de Bruno (HU20)
-│   ├── Autenticacion/    # Requests de registro y login
-│   ├── environments/     # Entornos Local y Production
-│   ├── Health/           # Request de health check
-│   ├── Listas/           # Requests CRUD y búsqueda de listas
-│   └── bruno.json        # Manifiesto de la colección
-├── prisma/               # Esquema relacional y migraciones SQLite
-│   ├── migrations/
-│   └── schema.prisma
+├── .github/workflows/         # Pipeline de CI (ci.yml)
+├── bruno/                     # Colección oficial de endpoints de Bruno
+│   ├── Autenticacion/         # Requests de registro, login y logout
+│   ├── environments/          # Entornos Local y Production
+│   ├── Evaluacion-Docente/    # 8 Escenarios de evaluación de cátedra (HU31)
+│   ├── Health/                # Request de health check
+│   ├── Items-y-Gastos/        # Requests de creación, alta, edición y borrado de ítems (HU37)
+│   ├── Listas/                # Requests CRUD, búsqueda y estados
+│   ├── Papelera/              # Requests de soft delete, papelera, restore y purga (HU37)
+│   └── bruno.json             # Manifiesto de la colección
+├── frontend/                  # Interfaz Web de usuario (HU30 y HU36)
+│   ├── app.js                 # Lógica interactiva cliente, SSE y consumo de API
+│   ├── index.html             # Estructura del panel de control y papelera
+│   └── styles.css             # Estilos responsivos y cuadro de cálculo financiero
+├── prisma/                    # Esquema relacional y migraciones SQLite
+│   ├── migrations/            # Historial de migraciones SQL
+│   └── schema.prisma          # Modelos User, List y ListItem
 ├── src/
-│   ├── controllers/      # Controladores HTTP (auth, list)
-│   ├── dtos/             # Data Transfer Objects
-│   ├── lib/              # Instancia singleton de PrismaClient
-│   ├── middlewares/      # auth, cors, rate-limit, sanitization
-│   ├── models/           # user.model (bcrypt), list.model
-│   ├── routes/           # auth.routes, list.routes
-│   ├── app.ts            # Inicialización de middlewares y rutas
-│   └── index.ts          # Arranque del servidor HTTP
-├── tests/                # Pruebas automatizadas de integración (app.test.ts)
-├── .env.example          # Plantilla de variables de entorno
-├── eslint.config.mjs     # Configuración de ESLint
-├── package.json          # Metadatos, dependencias y scripts
-├── tsconfig.json         # Configuración de TypeScript
-└── vitest.config.ts      # Configuración de Vitest
+│   ├── controllers/           # Controladores HTTP (auth, list)
+│   ├── dtos/                  # Data Transfer Objects (auth, list, item)
+│   ├── lib/                   # Instancia singleton de PrismaClient
+│   ├── middlewares/           # auth, cors, rate-limit, sanitization
+│   ├── models/                # user.model, list.model, list-item.model
+│   ├── routes/                # auth.routes, list.routes
+│   ├── services/              # list.service, sse.service
+│   ├── app.ts                 # Inicialización de Express, middlewares y rutas
+│   └── index.ts               # Arranque del servidor y tarea de purga automática
+├── tests/                     # Suite completa de pruebas de integración (app.test.ts)
+├── .env.example               # Plantilla de variables de entorno
+├── docker-compose.yml         # Orquestación de contenedores y volúmenes
+├── Dockerfile                 # Multi-stage build optimizado para producción
+├── eslint.config.mjs          # Configuración de ESLint
+├── package.json               # Dependencias, metadatos y scripts
+├── tsconfig.json              # Configuración de compilación TypeScript
+└── vitest.config.ts           # Configuración del framework Vitest
 ```
 
 ---
@@ -131,7 +151,28 @@ repar-tir/
    ```bash
    npm run dev
    ```
-   La API quedará escuchando en `http://localhost:3000`.
+   - La API quedará escuchando en `http://localhost:3000`.
+   - La interfaz web estará disponible en `http://localhost:3000/app`.
+
+---
+
+### 🐳 Ejecución con Docker y Docker Compose (HU29)
+
+Para levantar la solución completa en un contenedor aislado con volumen de persistencia:
+
+```bash
+docker compose up --build
+```
+
+Para ejecutarlo en segundo plano (detached):
+```bash
+docker compose up -d --build
+```
+
+Verificar el estado del servicio:
+```bash
+curl http://localhost:3000/api/health
+```
 
 ---
 
@@ -154,11 +195,13 @@ repar-tir/
 
 ## 🧪 Pruebas Automatizadas y Calidad
 
+El proyecto cuenta con **78 pruebas de integración automatizadas** con Vitest y Supertest:
+
 ```bash
 # Verificación estática de tipos
 npm run typecheck
 
-# Análisis de calidad y formato
+# Análisis de calidad y formato con ESLint
 npm run lint
 
 # Ejecutar pruebas automatizadas
@@ -167,17 +210,6 @@ npm test
 # Ejecutar pruebas con reporte de cobertura
 npm run test:coverage
 ```
-
----
-
-## 🚀 Despliegue (Deployment)
-
-- ⚪ **Estado:** **[POR DEFINIR]**
-- Actualmente no hay proveedores de hosting configurados en el repositorio. Para ejecutar en producción:
-  ```bash
-  npm run build
-  npm start
-  ```
 
 ---
 
