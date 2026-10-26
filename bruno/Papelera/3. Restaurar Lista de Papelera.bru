@@ -1,0 +1,29 @@
+meta {
+  name: 3. Restaurar Lista de Papelera
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/lists/{{listId}}/restore
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+tests {
+  test("Debe responder con HTTP 200 OK y devolver la lista restaurada con deletedAt null", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.have.property("id");
+    expect(res.getBody().deletedAt).to.be.null;
+  });
+}
+
+docs {
+  # Restaurar Lista de la Papelera
+  Restaura una lista enviada previamente a la papelera asignando `deletedAt = null`.
+  La lista vuelve a estar disponible en las búsquedas activas.
+}

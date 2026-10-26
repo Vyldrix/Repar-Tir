@@ -1,0 +1,29 @@
+meta {
+  name: 1. Enviar Lista a Papelera (Soft Delete)
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{baseUrl}}/api/lists/{{listId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+tests {
+  test("Debe responder con HTTP 200 OK y confirmar el envío a la papelera", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.have.property("message");
+    expect(res.getBody().message).to.match(/papelera/i);
+  });
+}
+
+docs {
+  # Enviar Lista a Papelera (Soft Delete)
+  Marca la lista con una fecha de eliminación (`deletedAt`) sin borrarla físicamente.
+  La lista deja de ser visible en las búsquedas regulares (`POST /api/lists/search`) y pasa a la papelera.
+}

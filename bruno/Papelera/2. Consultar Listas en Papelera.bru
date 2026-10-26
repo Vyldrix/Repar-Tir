@@ -1,0 +1,31 @@
+meta {
+  name: 2. Consultar Listas en Papelera
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/lists/trash
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+tests {
+  test("Debe responder con HTTP 200 OK y devolver un arreglo de listas en papelera", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.be.an("array");
+    if (res.getBody().length > 0) {
+      expect(res.getBody()[0]).to.have.property("deletedAt");
+      expect(res.getBody()[0]).to.have.property("daysRemaining");
+    }
+  });
+}
+
+docs {
+  # Consultar Listas en la Papelera
+  Retorna todas las listas del usuario que están marcadas para eliminación, informando la fecha de borrado y los días restantes antes de su purga definitiva (30 días).
+}

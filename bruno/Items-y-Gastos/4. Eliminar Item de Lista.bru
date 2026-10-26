@@ -1,0 +1,31 @@
+meta {
+  name: 4. Eliminar Item de Lista
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/lists/{{listId}}/items/{{itemId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+tests {
+  test("Debe responder con HTTP 200 OK tras eliminar el ítem", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("El ítem eliminado ya no debe figurar en la lista y los totales deben recalcularse", function() {
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().totalAmount).to.be.a("number");
+  });
+}
+
+docs {
+  # Eliminar Ítem de una Lista
+  Elimina el ítem especificado por `itemId` de la lista, deduciendo su valor del total y recalculando el prorrateo por persona.
+}
