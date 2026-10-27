@@ -27,11 +27,18 @@ app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
 
 // Interfaz Frontend Web estática ubicada en la carpeta separada frontend/ (HU30)
 const frontendDir = path.resolve(process.cwd(), 'frontend');
-app.get('/app', (_req: Request, res: Response) => {
+const noCacheStatic = (_req: Request, res: Response, next: () => void) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+};
+
+app.get('/app', noCacheStatic, (_req: Request, res: Response) => {
   res.sendFile(path.join(frontendDir, 'index.html'));
 });
-app.use('/app', express.static(frontendDir));
-app.get('/', (_req: Request, res: Response) => {
+app.use('/app', noCacheStatic, express.static(frontendDir));
+app.get('/', noCacheStatic, (_req: Request, res: Response) => {
   res.sendFile(path.join(frontendDir, 'index.html'));
 });
 

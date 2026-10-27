@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <meta name="color-scheme" content="dark" />
   <title>Repar-Tir | Gestión de Gastos, Reparto, Papelera e Idempotencia</title>
   <!-- Google Fonts: Inter & JetBrains Mono -->
   <link href="https://fonts.googleapis.com" rel="preconnect" />
@@ -43,7 +44,27 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="/app/styles.css?v=2.4.2" />
+    <style>
+    :root, html, body {
+      color-scheme: dark !important;
+    }
+    input, textarea, select {
+      background-color: #0f172a !important;
+      color: #f1f5f9 !important;
+      border-color: #27354d !important;
+      color-scheme: dark !important;
+    }
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
+      -webkit-text-fill-color: #f1f5f9 !important;
+      caret-color: #f1f5f9 !important;
+      transition: background-color 9999999s ease-in-out 0s !important;
+    }
+  </style>
+  <link rel="stylesheet" href="/app/styles.css?v=2.4.3" />
 </head>
 <body class="bg-surface-950 text-slate-200 font-sans min-h-screen antialiased flex flex-col selection:bg-brand-500 selection:text-white">
   <!-- BEGIN: MainHeader -->
@@ -162,7 +183,7 @@
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1" for="listTitle">Título del Evento / Lista</label>
               <div class="relative">
-                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="listTitle" placeholder="Ej: Asado del Domingo" type="text" autocomplete="off" required />
+                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="listTitle" placeholder="Ej: Asado del Domingo" type="text" autocomplete="off" style="background-color: #0f172a !important; color: #f1f5f9 !important;" required />
               </div>
             </div>
             <!-- Number of Persons Split -->
@@ -345,6 +366,6 @@
   </footer>
   <!-- END: MainFooter -->
 
-  <script src="/app/app.js?v=2.4.2"></script>
+  <script src="/app/app.js?v=2.4.3"></script>
 </body>
 </html>
