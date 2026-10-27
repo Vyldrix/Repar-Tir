@@ -456,11 +456,11 @@
             </table>
 
             <!-- Formulario Rápido de Nuevo Ítem -->
-            <div class="add-item-bar">
-              <input type="text" id="itemName_${item.id}" placeholder="Nuevo ítem (ej: Bebidas)" class="input-sm" />
-              <input type="number" id="itemPrice_${item.id}" placeholder="Precio $" min="0" step="0.01" class="input-sm" style="max-width: 90px;" />
-              <input type="number" id="itemQty_${item.id}" placeholder="Cant." min="1" value="1" class="input-sm" style="max-width: 65px;" />
-              <button class="btn btn-sm btn-primary" onclick="addItemToList('${item.id}')">➕ Agregar</button>
+            <div class="add-item-bar flex items-center gap-2 pt-2">
+              <input type="text" id="itemName_${item.id}" placeholder="Nuevo ítem (ej: Bebidas)" class="input-sm flex-1 bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs" autocomplete="off" />
+              <input type="number" id="itemPrice_${item.id}" placeholder="Precio $" min="0" step="0.01" class="input-sm bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs font-mono text-right" style="width: 95px;" autocomplete="off" />
+              <input type="number" id="itemQty_${item.id}" placeholder="Cant." min="1" value="1" class="input-sm bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs font-mono text-center" style="width: 65px;" autocomplete="off" />
+              <button class="btn btn-sm btn-primary px-3 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5" onclick="addItemToList('${item.id}')">➕ Agregar</button>
             </div>
           </div>
 

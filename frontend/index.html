@@ -43,7 +43,7 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="/app/styles.css" />
+  <link rel="stylesheet" href="/app/styles.css?v=2.4.2" />
 </head>
 <body class="bg-surface-950 text-slate-200 font-sans min-h-screen antialiased flex flex-col selection:bg-brand-500 selection:text-white">
   <!-- BEGIN: MainHeader -->
@@ -157,12 +157,12 @@
             </div>
             <span class="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Idempotente</span>
           </div>
-          <form class="space-y-4" id="createListForm">
+          <form class="space-y-4" id="createListForm" autocomplete="off">
             <!-- Event Title Input -->
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1" for="listTitle">Título del Evento / Lista</label>
               <div class="relative">
-                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="listTitle" placeholder="Ej: Asado del Domingo" type="text" required />
+                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="listTitle" placeholder="Ej: Asado del Domingo" type="text" autocomplete="off" required />
               </div>
             </div>
             <!-- Number of Persons Split -->
@@ -345,6 +345,6 @@
   </footer>
   <!-- END: MainFooter -->
 
-  <script src="/app/app.js"></script>
+  <script src="/app/app.js?v=2.4.2"></script>
 </body>
 </html>
