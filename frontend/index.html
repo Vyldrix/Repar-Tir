@@ -1,153 +1,349 @@
 <!DOCTYPE html>
-<html lang="es">
+<html class="dark" lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Repar-Tir — Panel de Control y Pruebas API REST</title>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Repar-Tir | Gestión de Gastos, Reparto, Papelera e Idempotencia</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- FontAwesome Icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <!-- Tailwind CSS v3 with Plugins -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+            },
+            surface: {
+              950: '#0b0f17',
+              900: '#0f172a',
+              850: '#141e33',
+              800: '#1e293b',
+              750: '#27354d',
+              700: '#334155',
+            }
+          }
+        }
+      }
+    };
+  </script>
   <link rel="stylesheet" href="/app/styles.css" />
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo-badge">RT</span>
-      <div>
-        <h1>Repar-Tir</h1>
-        <p class="subtitle">Gestión de Gastos, Reparto, Papelera, Estados e Idempotencia</p>
+<body class="bg-surface-950 text-slate-200 font-sans min-h-screen antialiased flex flex-col selection:bg-brand-500 selection:text-white">
+  <!-- BEGIN: MainHeader -->
+  <header class="w-full border-b border-surface-800 sticky top-0 z-50 bg-surface-900">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Logo and App Title -->
+      <div class="flex items-center space-x-3.5">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-400 flex items-center justify-center font-bold text-white text-base shadow-lg shadow-sky-900/40 border border-sky-400/30">
+          RT
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">Repar-Tir</h1>
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">v2.4-SaaS</span>
+          </div>
+          <p class="text-xs font-normal hidden sm:block text-slate-300">Gestión de Gastos, Reparto, Papelera, Estados e Idempotencia</p>
+        </div>
       </div>
-    </div>
-    <div class="session-bar" id="sessionBar">
-      <span class="status-pill" id="authStatusPill">No autenticado</span>
-      <button id="btnLogout" class="btn btn-danger hidden" type="button">
-        Cerrar Sesión (Logout / Revocar)
-      </button>
+      <!-- Auth Status Badge and Quick Stats -->
+      <div class="flex items-center space-x-3" id="sessionBar">
+        <div class="hidden md:flex items-center space-x-2 text-xs text-slate-400 bg-surface-850 px-3 py-1.5 rounded-lg border border-surface-750">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>API Gateway: <strong class="text-slate-200">Online</strong></span>
+        </div>
+        <div class="status-pill flex items-center space-x-2 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs px-3 py-1.5 rounded-lg font-medium" id="authStatusPill">
+          <i class="fa-solid fa-user-slash text-[11px]"></i>
+          <span>No autenticado</span>
+        </div>
+        <button id="btnLogout" class="hidden px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition flex items-center gap-1.5 shadow-sm" type="button">
+          <i class="fa-solid fa-power-off text-[11px]"></i>
+          <span>Cerrar Sesión (Logout / Revocar)</span>
+        </button>
+      </div>
     </div>
   </header>
+  <!-- END: MainHeader -->
 
-  <main class="container">
-    <!-- Columna Izquierda: Autenticación, Creación de Listas e Ítems -->
-    <section class="left-panel">
-      <!-- Tarjeta de Autenticación -->
-      <div class="card" id="authCard">
-        <h2>🔐 Autenticación y Sesión (JWT)</h2>
-        <div class="tabs">
-          <button type="button" class="tab active" data-tab="login">Iniciar Sesión</button>
-          <button type="button" class="tab" data-tab="register">Registrarse</button>
-        </div>
-
-        <form id="authForm">
-          <div class="form-group" id="usernameGroup" style="display: none;">
-            <label for="username">Nombre de usuario</label>
-            <input type="text" id="username" placeholder="ej. lautaro_dev" />
-          </div>
-          <div class="form-group">
-            <label for="email">Correo electrónico</label>
-            <input type="email" id="email" placeholder="usuario@ejemplo.com" required />
-          </div>
-          <div class="form-group">
-            <label for="password">Contraseña</label>
-            <input type="password" id="password" placeholder="Mínimo 6 caracteres" required />
-          </div>
-          <button type="submit" class="btn btn-primary full-width" id="btnAuthSubmit">
-            Iniciar Sesión
-          </button>
-        </form>
-      </div>
-
-      <!-- Tarjeta de Creación con Participantes, Ítems e Idempotency-Key -->
-      <div class="card">
-        <h2>➕ Crear Lista y Repartir Gastos</h2>
-        <form id="createListForm">
-          <div class="form-group">
-            <label for="listTitle">Título del Evento / Lista</label>
-            <input type="text" id="listTitle" placeholder="Ej: Asado del Domingo" required />
-          </div>
-          <div class="form-group">
-            <label for="participantsCount">👥 Cantidad de Personas a Repartir</label>
-            <input type="number" id="participantsCount" min="1" value="1" placeholder="Ej: 4 personas" required />
-          </div>
-          <div class="form-group">
-            <label for="idempotencyKey">Cabecera <code>Idempotency-Key</code></label>
-            <div class="input-row">
-              <input type="text" id="idempotencyKey" placeholder="Clave única para deduplicación" />
-              <button type="button" class="btn btn-secondary" id="btnGenKey" title="Generar nueva clave">
-                🔄 Generar
-              </button>
+  <!-- BEGIN: MainContent -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <!-- ========================================== -->
+      <!-- LEFT COLUMN: Auth & List Creation Forms    -->
+      <!-- ========================================== -->
+      <div class="lg:col-span-5 flex flex-col gap-6 left-panel">
+        <!-- BEGIN: AuthenticationCard -->
+        <section class="glass-panel rounded-2xl p-5 shadow-xl border border-surface-800 card" id="authCard" data-purpose="auth-card">
+          <div class="flex items-center justify-between pb-3 border-b border-surface-800 mb-4">
+            <div class="flex items-center gap-2 text-slate-100 font-semibold text-sm">
+              <i class="fa-solid fa-shield-halved text-amber-400"></i>
+              <span>Autenticación y Sesión (JWT)</span>
             </div>
-            <small class="hint">
-              Si enviás varias veces con la misma clave, la API devuelve el mismo ID sin duplicar en BD.
-            </small>
+            <span class="text-[11px] font-mono text-slate-400 bg-surface-900 px-2 py-0.5 rounded border border-surface-750">Bearer Auth</span>
           </div>
-          <button type="submit" class="btn btn-success full-width">
-            Enviar POST /api/lists
-          </button>
-        </form>
-      </div>
-
-      <!-- Consola de Eventos SSE y Respuestas HTTP -->
-      <div class="card">
-        <div class="card-header-row">
-          <h2>📡 Monitor HTTP & Eventos SSE (Worker Thread)</h2>
-          <button type="button" class="btn btn-sm" id="btnClearLog">Limpiar</button>
-        </div>
-        <div id="httpLog" class="console-log">
-          <div class="log-entry info">Sistema listo. Realice una petición para inspeccionar la respuesta HTTP.</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Columna Derecha: Listado Activo, Cálculo de Gastos y Papelera de Reciclaje -->
-    <section class="right-panel">
-      <div class="card">
-        <div class="tabs view-tabs">
-          <button type="button" class="tab active" id="tabActiveView" data-view="active">
-            📋 Listas Activas
-          </button>
-          <button type="button" class="tab" id="tabTrashView" data-view="trash">
-            🗑️ Papelera de Reciclaje (<span id="trashBadgeCount">0</span>)
-          </button>
-        </div>
-
-        <!-- Vista 1: Listas Activas -->
-        <div id="activeViewContainer">
-          <div class="card-header-row" style="margin-top: 1rem;">
-            <h2>📋 Listas, Gastos y División por Persona</h2>
-            <button type="button" class="btn btn-secondary" id="btnRefreshLists">
-              🔄 Actualizar Listas
+          <!-- Tab Selector: Login vs Register -->
+          <div class="tabs grid grid-cols-2 gap-1.5 bg-surface-900 p-1 rounded-xl mb-4 text-xs font-medium border border-surface-800">
+            <button class="tab active py-2 text-center rounded-lg bg-brand-600 text-white shadow-sm transition" data-tab="login" id="tab-login" type="button">
+              <i class="fa-solid fa-right-to-bracket mr-1.5"></i>Iniciar Sesión
+            </button>
+            <button class="tab py-2 text-center rounded-lg text-slate-400 hover:text-white transition" data-tab="register" id="tab-register" type="button">
+              <i class="fa-solid fa-user-plus mr-1.5"></i>Registrarse
             </button>
           </div>
-          <p class="hint">
-            Flujo válido: <code>BORRADOR ➔ CONFIRMADA ➔ ELIMINADA</code>. Podés agregar ítems a cada lista, ver el total y el cálculo exacto por persona.
-          </p>
+          <form class="space-y-3.5" id="authForm">
+            <div class="form-group" id="usernameGroup" style="display: none;">
+              <label class="block text-xs font-medium text-slate-300 mb-1" for="username">Nombre de usuario</label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs">
+                  <i class="fa-regular fa-user"></i>
+                </div>
+                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl pl-9 pr-3 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="username" placeholder="ej. lautaro_dev" type="text" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1" for="email">Correo electrónico</label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs">
+                  <i class="fa-regular fa-envelope"></i>
+                </div>
+                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl pl-9 pr-3 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="email" placeholder="usuario@ejemplo.com" type="email" required />
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <label class="block text-xs font-medium text-slate-300" for="password">Contraseña</label>
+                <span class="text-[11px] text-slate-500">Mínimo 6 caracteres</span>
+              </div>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs">
+                  <i class="fa-solid fa-lock"></i>
+                </div>
+                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl pl-9 pr-9 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="password" placeholder="••••••••" type="password" required />
+                <button class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300 text-xs" onclick="const p = document.getElementById('password'); p.type = p.type === 'password' ? 'text' : 'password';" type="button">
+                  <i class="fa-regular fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <button class="w-full mt-2 py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 transition shadow-lg shadow-sky-900/30 flex items-center justify-center gap-2" id="btnAuthSubmit" type="submit">
+              <i class="fa-solid fa-arrow-right-to-bracket"></i>
+              <span>Iniciar Sesión</span>
+            </button>
+          </form>
+        </section>
+        <!-- END: AuthenticationCard -->
 
-          <div id="listsContainer" class="lists-grid">
-            <div class="empty-state">Iniciá sesión para consultar y gestionar tus listas.</div>
+        <!-- BEGIN: CreateListCard -->
+        <section class="glass-panel rounded-2xl p-5 shadow-xl border border-surface-800 card" data-purpose="create-list-card">
+          <div class="flex items-center justify-between pb-3 border-b border-surface-800 mb-4">
+            <div class="flex items-center gap-2 text-slate-100 font-semibold text-sm">
+              <i class="fa-solid fa-circle-plus text-sky-400"></i>
+              <span>Crear Lista y Repartir Gastos</span>
+            </div>
+            <span class="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Idempotente</span>
           </div>
-        </div>
+          <form class="space-y-4" id="createListForm">
+            <!-- Event Title Input -->
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1" for="listTitle">Título del Evento / Lista</label>
+              <div class="relative">
+                <input class="w-full bg-surface-900 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 border border-surface-750 focus:border-brand-500 focus:ring-0 transition" id="listTitle" placeholder="Ej: Asado del Domingo" type="text" required />
+              </div>
+            </div>
+            <!-- Number of Persons Split -->
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5" for="participantsCount">
+                <i class="fa-solid fa-users text-slate-400 text-[11px]"></i>
+                <span>Cantidad de Personas a Repartir</span>
+              </label>
+              <div class="flex items-center space-x-2">
+                <button class="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-800 hover:bg-surface-750 border border-surface-700 text-slate-300 transition" onclick="const el=document.getElementById('participantsCount'); el.value = Math.max(1, parseInt(el.value||1)-1)" type="button">
+                  <i class="fa-solid fa-minus text-xs"></i>
+                </button>
+                <input class="w-full text-center bg-surface-900 text-slate-100 text-xs rounded-xl py-2 border border-surface-750 focus:border-brand-500 focus:ring-0 font-mono" id="participantsCount" min="1" type="number" value="1" placeholder="Ej: 4 personas" required />
+                <button class="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-800 hover:bg-surface-750 border border-surface-700 text-slate-300 transition" onclick="const el=document.getElementById('participantsCount'); el.value = parseInt(el.value||1)+1" type="button">
+                  <i class="fa-solid fa-plus text-xs"></i>
+                </button>
+              </div>
+            </div>
+            <!-- Idempotency-Key Header Specification -->
+            <div class="bg-surface-900/90 rounded-xl p-3 border border-surface-800 space-y-2">
+              <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider flex items-center justify-between" for="idempotencyKey">
+                <span>Cabecera Idempotency-Key</span>
+                <span class="text-sky-400 font-mono text-[10px]">UUID RFC-4122</span>
+              </label>
+              <div class="flex gap-2">
+                <input class="font-mono text-xs w-full bg-surface-950 text-sky-300 px-3 py-2 rounded-lg border border-surface-750 selection:bg-sky-900 focus:outline-none" id="idempotencyKey" placeholder="Clave única para deduplicación" type="text" />
+                <button class="px-3 py-2 bg-surface-800 hover:bg-surface-750 active:scale-95 border border-surface-700 text-slate-200 text-xs rounded-lg flex items-center gap-1.5 transition font-medium" id="btnGenKey" title="Generar nueva clave" type="button">
+                  <i class="fa-solid fa-arrows-rotate text-sky-400"></i>
+                  <span>Generar</span>
+                </button>
+              </div>
+              <div class="flex items-start gap-1.5 text-[11px] text-slate-400 leading-relaxed pt-1">
+                <i class="fa-solid fa-circle-info text-sky-400 mt-0.5 text-[10px]"></i>
+                <span>Si enviás varias veces con la misma clave, la API devuelve el mismo ID sin duplicar registros en BD.</span>
+              </div>
+            </div>
+            <!-- Action Button: POST Request -->
+            <button class="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-emerald-100 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] transition shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2" type="submit">
+              <span class="bg-emerald-800 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded font-bold">POST</span>
+              <span>Enviar POST /api/lists</span>
+            </button>
+          </form>
+        </section>
+        <!-- END: CreateListCard -->
+      </div>
 
-        <!-- Vista 2: Papelera de Reciclaje (Soft Delete con retención de 30 días) -->
-        <div id="trashViewContainer" style="display: none;">
-          <div class="card-header-row" style="margin-top: 1rem;">
-            <h2>🗑️ Papelera de Reciclaje (Retención 30 Días)</h2>
-            <div class="actions-row">
-              <button type="button" class="btn btn-secondary" id="btnRefreshTrash">
-                🔄 Actualizar Papelera
+      <!-- ========================================== -->
+      <!-- RIGHT COLUMN: Lists Dashboard & Monitor   -->
+      <!-- ========================================== -->
+      <div class="lg:col-span-7 flex flex-col gap-6 right-panel">
+        <!-- BEGIN: ListsDashboardCard -->
+        <section class="glass-panel rounded-2xl p-5 shadow-xl border border-surface-800 flex flex-col card" data-purpose="lists-dashboard">
+          <!-- Top Tabs & Sync Button -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-surface-800">
+            <div class="tabs view-tabs flex items-center space-x-2 bg-surface-900 p-1 rounded-xl border border-surface-800">
+              <button class="tab active px-3.5 py-1.5 rounded-lg text-xs font-medium bg-brand-600 text-white shadow-sm flex items-center gap-2 transition" id="tabActiveView" data-view="active" type="button">
+                <i class="fa-solid fa-folder-open text-[11px]"></i>
+                <span>Listas Activas</span>
               </button>
-              <button type="button" class="btn btn-danger" id="btnPurgeTrash" title="Eliminar definitivamente listas con más de 30 días">
-                🧹 Purgar Expiradas (+30d)
+              <button class="tab px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white flex items-center gap-2 transition" id="tabTrashView" data-view="trash" type="button">
+                <i class="fa-regular fa-trash-can text-[11px]"></i>
+                <span>Papelera de Reciclaje</span>
+                <span class="bg-surface-800 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono" id="trashBadgeCount">0</span>
+              </button>
+            </div>
+            <button class="px-3 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-750 text-slate-200 text-xs font-medium flex items-center gap-2 transition" id="btnRefreshLists" type="button">
+              <i class="fa-solid fa-rotate text-sky-400"></i>
+              <span>Actualizar Listas</span>
+            </button>
+          </div>
+
+          <!-- Section Subtitle & State Workflow Pipeline -->
+          <div class="py-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-surface-800/60">
+            <div class="flex items-center gap-2">
+              <span class="text-base">📋</span>
+              <h2 class="text-sm font-semibold text-slate-100">Listas, Gastos y División por Persona</h2>
+            </div>
+            <!-- Workflow Status Badges -->
+            <div class="flex items-center text-[10px] font-mono font-medium gap-1.5 text-slate-400 bg-surface-900/60 px-2.5 py-1 rounded-lg border border-surface-800">
+              <span class="text-amber-400">BORRADOR</span>
+              <i class="fa-solid fa-arrow-right text-[8px] text-slate-600"></i>
+              <span class="text-emerald-400">CONFIRMADA</span>
+              <i class="fa-solid fa-arrow-right text-[8px] text-slate-600"></i>
+              <span class="text-rose-400">ELIMINADA</span>
+            </div>
+          </div>
+
+          <!-- Vista 1: Listas Activas -->
+          <div id="activeViewContainer">
+            <p class="text-xs py-3 leading-relaxed text-slate-300">
+              Flujo válido: <span class="text-slate-300 font-mono text-[11px]">BORRADOR → CONFIRMADA → ELIMINADA</span>. Podés agregar ítems a cada lista, ver el total acumulado y el cálculo exacto por persona en tiempo real.
+            </p>
+            <div id="listsContainer" class="lists-grid space-y-3.5 my-2">
+              <div class="empty-state border border-surface-750 rounded-xl p-4 text-center bg-surface-900">
+                <p class="text-xs text-slate-400"><i class="fa-solid fa-lock text-slate-400 mr-1.5"></i><span class="text-slate-300 font-medium">Iniciá sesión para consultar y gestionar tus listas activas o sincronizar en la nube.</span></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Vista 2: Papelera de Reciclaje (Soft Delete con retención de 30 Días) -->
+          <div id="trashViewContainer" style="display: none;">
+            <div class="py-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-surface-800/60">
+              <div class="flex items-center gap-2">
+                <span class="text-base">🗑️</span>
+                <h2 class="text-sm font-semibold text-slate-100">Papelera de Reciclaje (Retención 30 Días)</h2>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="px-3 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-750 text-slate-200 text-xs font-medium flex items-center gap-2 transition" id="btnRefreshTrash" type="button">
+                  <i class="fa-solid fa-rotate text-sky-400"></i>
+                  <span>Actualizar Papelera</span>
+                </button>
+                <button class="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-medium flex items-center gap-2 transition" id="btnPurgeTrash" title="Eliminar definitivamente listas con más de 30 días" type="button">
+                  <i class="fa-solid fa-broom text-rose-400"></i>
+                  <span>Purgar Expiradas (+30 Días)</span>
+                </button>
+              </div>
+            </div>
+            <p class="text-xs py-3 leading-relaxed text-slate-300">
+              Las listas eliminadas permanecen <span class="font-semibold text-amber-400">30 Días</span> en la papelera antes de ser depuradas permanentemente del sistema. Podés restaurarlas a su estado activo en cualquier momento.
+            </p>
+            <div id="trashContainer" class="lists-grid space-y-3.5 my-2">
+              <div class="empty-state border border-surface-750 rounded-xl p-4 text-center bg-surface-900">
+                <p class="text-xs text-slate-400"><i class="fa-solid fa-trash-arrow-up text-slate-400 mr-1.5"></i><span class="text-slate-300 font-medium">No hay listas en la papelera de reciclaje.</span></p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- END: ListsDashboardCard -->
+
+        <!-- BEGIN: MonitorCard -->
+        <section class="glass-panel rounded-2xl p-5 shadow-xl border border-surface-800 flex flex-col card" data-purpose="http-sse-monitor">
+          <div class="flex items-center justify-between pb-3 border-b border-surface-800 mb-3">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-terminal text-sky-400 text-sm"></i>
+              <h2 class="text-sm font-semibold text-slate-100">Monitor HTTP &amp; Eventos SSE</h2>
+              <span class="text-[11px] text-slate-400 font-normal hidden sm:inline">(Worker Thread)</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                SSE Activo
+              </span>
+              <button class="text-xs px-2.5 py-1 bg-surface-800 hover:bg-surface-750 text-slate-300 rounded-lg border border-surface-700 transition" id="btnClearLog" type="button">
+                <i class="fa-solid fa-trash-can text-[10px] mr-1"></i>Limpiar
               </button>
             </div>
           </div>
-          <p class="hint">
-            Las listas eliminadas permanecen 30 días en la papelera antes de ser eliminadas permanentemente. Podés restaurarlas en cualquier momento.
-          </p>
-
-          <div id="trashContainer" class="lists-grid">
-            <div class="empty-state">No hay listas en la papelera de reciclaje.</div>
+          <!-- Console Terminal Screen -->
+          <div class="relative bg-surface-950 rounded-xl border border-surface-850 p-4 font-mono text-xs leading-relaxed overflow-x-auto min-h-[160px] max-h-[240px]" id="terminal-screen">
+            <div class="console-log space-y-1.5" id="httpLog">
+              <div class="log-entry info text-slate-500 font-mono flex items-center gap-2">
+                <span class="text-sky-500">[SYSTEM]</span>
+                <span>Sistema listo. Realice una petición para inspeccionar la respuesta HTTP y el worker thread.</span>
+              </div>
+              <div class="log-entry sse text-slate-400 flex items-center gap-2">
+                <span class="text-emerald-400">[SSE-INIT]</span>
+                <span>Worker sub-process inicializado con éxito. Canales: [events, lists_sync].</span>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
+        <!-- END: MonitorCard -->
       </div>
-    </section>
+    </div>
   </main>
+  <!-- END: MainContent -->
+
+  <!-- BEGIN: MainFooter -->
+  <footer class="w-full bg-surface-900 border-t border-surface-800 py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+      <div class="flex items-center space-x-2">
+        <span class="font-semibold text-slate-400">Repar-Tir Engine</span>
+        <span>•</span>
+        <span>Soporte para transacciones ACID &amp; Idempotencia HTTP RFC-7231</span>
+      </div>
+      <div>
+        <span>Token Session Status: <span class="text-amber-400 font-mono">JWT Bearer Support</span></span>
+      </div>
+    </div>
+  </footer>
+  <!-- END: MainFooter -->
 
   <script src="/app/app.js"></script>
 </body>
