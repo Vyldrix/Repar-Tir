@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "reporters": [
+    "html",
+    "clear-text",
+    "progress"
+  ],
+  "testRunner": "vitest",
+  "testRunner_comment": "Configuración oficial para ejecución de Mutation Testing con Vitest",
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/services/**/*.ts",
+    "src/middlewares/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts"
+  ]
+}
