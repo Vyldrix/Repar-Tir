@@ -6,11 +6,11 @@
 ![Bcrypt](https://img.shields.io/badge/Bcrypt-6.0.0-4A154B?style=for-the-badge&logo=letsencrypt&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-6.19.3-2D3748?style=for-the-badge&logo=prisma&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-5.0.1-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-5.0.2-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Bruno](https://img.shields.io/badge/Bruno-Collection-FF6C37?style=for-the-badge)
 
-Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **TypeScript** orientada a la **gestión, cálculo y reparto equitativo de gastos** entre múltiples personas, administración de ítems con cantidades y precios, ciclo de vida con **papelera de reciclaje (soft delete)**, autenticación JWT con refresh tokens, control de acceso basado en roles (RBAC), seguridad multicapa contra inyecciones y frontend web interactivo servido en `/app`.
+Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **TypeScript** orientada a la **gestión, cálculo y reparto equitativo de gastos** entre múltiples personas, administración de ítems con cantidades y precios, ciclo de vida con **papelera de reciclaje (soft delete)**, autenticación JWT con refresh tokens, control de acceso basado en roles (RBAC), seguridad multicapa contra inyecciones y frontend web interactivo en modo oscuro (*Tailwind CSS + Glassmorphism*) servido en `/app`.
 
 ---
 
@@ -19,7 +19,7 @@ Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **Ty
 - **¿Qué es?** Un backend desacoplado y robustecido para gestionar eventos y listas de gastos compartidos (asados, viajes, compras grupales) calculando automáticamente el costo consolidado y la división equitativa por participante.
 - **¿Qué problema resuelve?** Elimina la complejidad del cálculo de gastos grupales, garantiza la retención segura de datos con papelera de reciclaje y recuperación de 30 días, y mitiga vulnerabilidades críticas de OWASP (IDOR, SQLi, NoSQLi, XSS, Prototype Pollution, Brute Force).
 - **¿Para quién está pensado?** Grupos de personas que comparten gastos, aplicaciones cliente web o móviles y evaluadores que consuman servicios REST protegidos por JWT.
-- **Estado actual:** 🟢 **100% Funcional y Probado** con las **38 Historias de Usuario (HU01 a HU38)** implementadas, documentadas y validadas con 78 tests automatizados.
+- **Estado actual:** 🟢 **100% Funcional y Probado** con las **40 Historias de Usuario (HU01 a HU40)** implementadas, documentadas y validadas con **85 tests automatizados distribuidos en 7 suites modulares**.
 
 ---
 
@@ -45,11 +45,13 @@ Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **Ty
 - **Máquina de Estados de Lista (HU23, HU24, HU25):** Flujo `BORRADOR ➔ CONFIRMADA ➔ ELIMINADA` con rechazo HTTP 400 ante transiciones prohibidas.
 - **Idempotencia Operativa (HU26):** Soporte de cabecera `Idempotency-Key` en `POST /api/lists` para evitar creaciones duplicadas.
 - **Procesamiento Asíncrono y SSE (HU28):** Tarea pesada en Worker Thread secundario y canal Server-Sent Events en `GET /api/lists/:id/events`.
-- **Interfaz Web Frontend en `/app` (HU30 y HU36):**
-  - Servida estáticamente desde la carpeta `frontend/`.
-  - Formularios de autenticación, creación de listas con personas e ítems dinámicos.
-  - Tarjetas con cuadro financiero en vivo y desglose de ítems.
-  - Pestañas entre **Listas Activas** y **Papelera de Reciclaje** con contador regresivo y botón de restauración inmediata.
+- **Interfaz Web Frontend en `/app` (HU30, HU36 y HU40):**
+  - Diseño oscuro moderno (*Tailwind CSS + Glassmorphism*) servido desde `frontend/`.
+  - Modales personalizados (`#customModal`) para edición en vivo de listas e ítems sin diálogos nativos (`alert`/`prompt`/`confirm`).
+  - Sistema de notificaciones flotantes animadas (*Toasts*), buscador reactivo con *debounce*, estados de carga y gestión limpia de conexiones `EventSource` (SSE).
+  - Pestañas entre **Listas Activas** y **Papelera de Reciclaje** con contadores sincronizados y botón de restauración inmediata.
+- **Suite de Pruebas Modularizada (HU38 y HU39):**
+  - 85 pruebas automatizadas organizadas por dominio funcional (`health-and-security`, `auth`, `lists`, `items`, `trash`, `unit`, `frontend-ui`) y helpers compartidos (`test-setup.ts`).
 - **Seguridad Multicapa y Anti-IDOR:**
   - Mitigación IDOR en todos los endpoints de listas, ítems y papelera (HTTP 403 Forbidden).
   - Sanitización estricta (SQLi, NoSQLi, XSS, Prototype Pollution y Null Bytes).
@@ -61,6 +63,21 @@ Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **Ty
 
 ---
 
+## ⚙️ Persistencia, Concurrencia y Paralelismo
+
+1. **Persistencia Relacional ACID (SQLite + Prisma ORM):**
+   - Instancia Singleton de `PrismaClient` (`src/lib/prisma.ts`) sobre SQLite (`prisma/schema.prisma`).
+   - Escrituras anidadas transaccionales (*Nested Writes*) al crear listas con ítems, borrado en cascada (`onDelete: Cascade`) y *Soft Delete* indexado (`@@index([deletedAt])`).
+2. **Concurrencia (Event Loop Asíncrono y Sincronización):**
+   - Controladores, servicios y modelos 100% no bloqueantes (`async/await`) y consultas paginadas concurrentes con `Promise.all([count, findMany])`.
+   - Prevención de condiciones de carrera (*Race Conditions*) en idempotencia mediante bloqueo de promesas en vuelo (`inFlightCreations: Map<string, Promise<List>>`) y restricción única compuesta `@@unique([userId, idempotencyKey])`.
+   - Múltiples suscriptores simultáneos en tiempo real vía **Server-Sent Events (SSE)**.
+3. **Paralelismo Real en CPU (`Worker Threads` + `libuv`):**
+   - `SseService` delega el cálculo y firma criptográfica (`crypto.pbkdf2Sync`) al confirmar una lista a un hilo secundario real (`node:worker_threads`), liberando el hilo principal de Express.
+   - El cifrado `bcrypt` (10 *salt rounds*) se ejecuta en paralelo en el *thread pool* nativo en C++ de Node.js.
+
+---
+
 ## 🛠️ Tecnologías Utilizadas
 
 - **Runtime:** Node.js (v20+ / v22+) (ES Modules)
@@ -68,7 +85,7 @@ Solución integral y blindada desarrollada con **Node.js**, **Express 5** y **Ty
 - **Framework Web:** Express 5.2.1
 - **Seguridad:** Bcrypt 6.0.0, crypto nativo, CORS 2.8.6
 - **ORM & Base de Datos:** Prisma 6.19.3 con motor SQLite
-- **Testing:** Vitest 5.0.2, Supertest 7.2.2 y @vitest/coverage-v8 (78 tests)
+- **Testing:** Vitest 5.0.2, Supertest 7.2.2, @vitest/coverage-v8 y Stryker Mutator (85 tests en 7 suites)
 - **Calidad de Código:** ESLint 10.11.0 con typescript-eslint
 - **Contenedores:** Dockerfile multi-stage y Docker Compose
 - **Cliente API:** Colección de Bruno v1
@@ -89,10 +106,10 @@ repar-tir/
 │   ├── Listas/                # Requests CRUD, búsqueda y estados
 │   ├── Papelera/              # Requests de soft delete, papelera, restore y purga (HU37)
 │   └── bruno.json             # Manifiesto de la colección
-├── frontend/                  # Interfaz Web de usuario (HU30 y HU36)
-│   ├── app.js                 # Lógica interactiva cliente, SSE y consumo de API
-│   ├── index.html             # Estructura del panel de control y papelera
-│   └── styles.css             # Estilos responsivos y cuadro de cálculo financiero
+├── frontend/                  # Interfaz Web de usuario (HU30, HU36 y HU40)
+│   ├── app.js                 # Lógica interactiva cliente, modales, toasts, SSE y API
+│   ├── index.html             # Estructura del panel de control, modales y papelera
+│   └── styles.css             # Estilos dark mode, glassmorphism y animaciones
 ├── prisma/                    # Esquema relacional y migraciones SQLite
 │   ├── migrations/            # Historial de migraciones SQL
 │   └── schema.prisma          # Modelos User, List y ListItem
@@ -106,12 +123,21 @@ repar-tir/
 │   ├── services/              # list.service, sse.service
 │   ├── app.ts                 # Inicialización de Express, middlewares y rutas
 │   └── index.ts               # Arranque del servidor y tarea de purga automática
-├── tests/                     # Suite completa de pruebas de integración (app.test.ts)
+├── tests/                     # Suite modularizada de pruebas (HU38, HU39 y HU40)
+│   ├── helpers/test-setup.ts  # Utilidades de limpieza de BD y autenticación
+│   ├── auth.test.ts           # Pruebas de registro, login, refresh y logout
+│   ├── frontend-ui.test.ts    # Pruebas de UI/UX, modales, toasts y activos en /app
+│   ├── health-and-security.test.ts # Salud, JWT, HSTS y Rate Limiting
+│   ├── items.test.ts          # Pruebas de ítems, participantes y reparto financiero
+│   ├── lists.test.ts          # Pruebas de listas, estados, idempotencia, IDOR y SSE
+│   ├── trash.test.ts          # Pruebas de papelera (soft delete), restore y purga
+│   └── unit.test.ts           # Pruebas unitarias de servicios e infraestructura
 ├── .env.example               # Plantilla de variables de entorno
 ├── docker-compose.yml         # Orquestación de contenedores y volúmenes
 ├── Dockerfile                 # Multi-stage build optimizado para producción
 ├── eslint.config.mjs          # Configuración de ESLint
 ├── package.json               # Dependencias, metadatos y scripts
+├── stryker.config.json        # Configuración de Mutation Testing
 ├── tsconfig.json              # Configuración de compilación TypeScript
 └── vitest.config.ts           # Configuración del framework Vitest
 ```
@@ -195,7 +221,7 @@ curl http://localhost:3000/api/health
 
 ## 🧪 Pruebas Automatizadas y Calidad
 
-El proyecto cuenta con **78 pruebas de integración automatizadas** con Vitest y Supertest:
+El proyecto cuenta con **85 pruebas automatizadas distribuidas en 7 suites modulares** con Vitest y Supertest:
 
 ```bash
 # Verificación estática de tipos
@@ -204,7 +230,7 @@ npm run typecheck
 # Análisis de calidad y formato con ESLint
 npm run lint
 
-# Ejecutar pruebas automatizadas
+# Ejecutar todas las suites modulares de pruebas
 npm test
 
 # Ejecutar pruebas con reporte de cobertura
