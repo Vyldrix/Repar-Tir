@@ -28,7 +28,8 @@ select:focus,
 input[type='text']:focus,
 input[type='number']:focus,
 input[type='email']:focus,
-input[type='password']:focus {
+input[type='password']:focus,
+input[type='search']:focus {
   background-color: #0f172a !important;
   color: #ffffff !important;
   border-color: #0ea5e9 !important;
@@ -97,7 +98,7 @@ select:autofill {
 
 /* Glassmorphism Panel */
 .glass-panel {
-  background: rgba(20, 30, 51, 0.7);
+  background: rgba(20, 30, 51, 0.75);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(51, 65, 85, 0.6);
@@ -130,6 +131,52 @@ select:autofill {
   color: #6ee7b7 !important;
 }
 
+/* Toast Notifications (HU40) */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.toast-notification {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid #334155;
+  color: #f1f5f9;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  animation: toastSlideIn 0.2s ease-out forwards;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-notification.toast-success {
+  border-left: 4px solid #10b981;
+}
+
+.toast-notification.toast-error {
+  border-left: 4px solid #f43f5e;
+}
+
+.toast-notification.toast-info {
+  border-left: 4px solid #38bdf8;
+}
+
+.toast-notification.toast-warning {
+  border-left: 4px solid #f59e0b;
+}
+
 /* Lists Grid and Cards */
 .lists-grid {
   display: flex;
@@ -142,7 +189,7 @@ select:autofill {
   border: 1px solid #1e293b;
   border-radius: 0.75rem;
   padding: 1rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -150,7 +197,7 @@ select:autofill {
 
 .list-item:hover {
   border-color: #334155;
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.35);
 }
 
 .list-item.trash-item {
@@ -182,6 +229,11 @@ select:autofill {
   font-size: 0.6875rem;
   color: #94a3b8;
   font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .list-meta code {
@@ -379,6 +431,11 @@ select:autofill {
   user-select: none;
 }
 
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-sm {
   padding: 0.35rem 0.65rem;
   font-size: 0.75rem;
@@ -394,7 +451,7 @@ select:autofill {
   background-color: #0284c7;
   color: #ffffff;
 }
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background-color: #0ea5e9;
 }
 
@@ -402,7 +459,7 @@ select:autofill {
   background-color: #059669;
   color: #ecfdf5;
 }
-.btn-success:hover {
+.btn-success:hover:not(:disabled) {
   background-color: #10b981;
 }
 
@@ -410,7 +467,7 @@ select:autofill {
   background-color: #e11d48;
   color: #fff1f2;
 }
-.btn-danger:hover {
+.btn-danger:hover:not(:disabled) {
   background-color: #f43f5e;
 }
 
@@ -418,7 +475,7 @@ select:autofill {
   background-color: #d97706;
   color: #fffbeb;
 }
-.btn-warning:hover {
+.btn-warning:hover:not(:disabled) {
   background-color: #f59e0b;
 }
 
@@ -427,7 +484,7 @@ select:autofill {
   color: #cbd5e1;
   border: 1px solid #334155;
 }
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background-color: #334155;
   color: #ffffff;
 }
