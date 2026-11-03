@@ -113,12 +113,24 @@ select:autofill {
   display: none !important;
 }
 
-/* Tab Active State */
+/* Tab Active & Inactive States */
+.tab {
+  background-color: transparent !important;
+  color: #94a3b8 !important;
+  border: 1px solid transparent !important;
+  cursor: pointer;
+}
+
+.tab:hover:not(.active) {
+  color: #f8fafc !important;
+  background-color: rgba(30, 41, 59, 0.55) !important;
+}
+
 .tab.active {
   background-color: #0284c7 !important;
   color: #ffffff !important;
   border-color: #38bdf8 !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Auth Status Pill */

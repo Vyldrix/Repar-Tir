@@ -1,6 +1,5 @@
 (function () {
   let mode = 'login';
-  let currentView = 'active';
   let searchFilter = '';
   let searchTimeout = null;
   let accessToken = localStorage.getItem('repartir_access_token') || '';
@@ -16,6 +15,16 @@
   const activeSseConnections = new Map();
   let cachedActiveLists = [];
   let modalConfirmHandler = null;
+
+  const AVAILABLE_UNITS = [
+    { value: 'u.', label: 'u. (Unidad)', priceRef: 'u.' },
+    { value: 'kg', label: 'kg (Kilos)', priceRef: 'kg' },
+    { value: 'g', label: 'g (Gramos)', priceRef: 'kg' },
+    { value: 'L', label: 'L (Litros)', priceRef: 'L' },
+    { value: 'ml', label: 'ml (Mililitros)', priceRef: 'L' },
+    { value: 'pack', label: 'pack (Pack)', priceRef: 'pack' },
+    { value: 'doc.', label: 'doc. (Docena)', priceRef: 'doc.' },
+  ];
 
   const authStatusPill = document.getElementById('authStatusPill');
   const btnLogout = document.getElementById('btnLogout');
@@ -34,7 +43,6 @@
   const idempotencyKeyInput = document.getElementById('idempotencyKey');
   const btnGenKey = document.getElementById('btnGenKey');
   const btnCreateListSubmit = document.getElementById('btnCreateListSubmit');
-  const btnRefreshLists = document.getElementById('btnRefreshLists');
   const searchListsInput = document.getElementById('searchListsInput');
   const listsContainer = document.getElementById('listsContainer');
   const activeBadgeCount = document.getElementById('activeBadgeCount');
@@ -57,7 +65,6 @@
   const trashViewContainer = document.getElementById('trashViewContainer');
   const trashContainer = document.getElementById('trashContainer');
   const trashBadgeCount = document.getElementById('trashBadgeCount');
-  const btnRefreshTrash = document.getElementById('btnRefreshTrash');
   const btnPurgeTrash = document.getElementById('btnPurgeTrash');
 
   function escapeHtml(str) {
@@ -69,6 +76,26 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
+
+  function formatQuantity(qty, unit) {
+    const num = Number(qty);
+    const cleanNum = Number.isInteger(num) ? String(num) : String(Number(num.toFixed(3)));
+    const cleanUnit = unit || 'u.';
+    return `${cleanNum} ${cleanUnit}`;
+  }
+
+  function getPriceReferenceLabel(unit) {
+    const found = AVAILABLE_UNITS.find((u) => u.value === (unit || 'u.'));
+    return found ? found.priceRef : 'u.';
+  }
+
+  window.updatePricePlaceholder = function (listId) {
+    const unitSelect = document.getElementById(`itemUnit_${listId}`);
+    const priceInput = document.getElementById(`itemPrice_${listId}`);
+    if (!unitSelect || !priceInput) return;
+    const ref = getPriceReferenceLabel(unitSelect.value);
+    priceInput.placeholder = `Precio x ${ref} $`;
+  };
 
   function showToast(message, type = 'info') {
     if (!toastContainer) return;
@@ -205,21 +232,31 @@
     });
   }
 
-  // Pestañas de Login / Registro
-  document.querySelectorAll('.card .tabs:not(.view-tabs) .tab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.card .tabs:not(.view-tabs) .tab').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      mode = btn.getAttribute('data-tab');
-      if (mode === 'register') {
-        usernameGroup.style.display = 'block';
-        btnAuthSubmit.innerHTML = '<i class="fa-solid fa-user-plus"></i><span>Crear Cuenta</span>';
-      } else {
-        usernameGroup.style.display = 'none';
-        btnAuthSubmit.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i><span>Iniciar Sesión</span>';
-      }
-    });
-  });
+  // Pestañas de Login / Registro (exclusivas: solo la pestaña en uso se marca activa)
+  const loginTabBtn = document.getElementById('tab-login');
+  const registerTabBtn = document.getElementById('tab-register');
+
+  function setAuthTabMode(targetMode) {
+    mode = targetMode;
+    if (mode === 'register') {
+      if (registerTabBtn) registerTabBtn.classList.add('active');
+      if (loginTabBtn) loginTabBtn.classList.remove('active');
+      usernameGroup.style.display = 'block';
+      btnAuthSubmit.innerHTML = '<i class="fa-solid fa-user-plus"></i><span>Crear Cuenta</span>';
+    } else {
+      if (loginTabBtn) loginTabBtn.classList.add('active');
+      if (registerTabBtn) registerTabBtn.classList.remove('active');
+      usernameGroup.style.display = 'none';
+      btnAuthSubmit.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i><span>Iniciar Sesión</span>';
+    }
+  }
+
+  if (loginTabBtn) {
+    loginTabBtn.addEventListener('click', () => setAuthTabMode('login'));
+  }
+  if (registerTabBtn) {
+    registerTabBtn.addEventListener('click', () => setAuthTabMode('register'));
+  }
 
   // Pestañas de Vista (Listas Activas vs Papelera)
   if (tabActiveView && tabTrashView) {
@@ -228,7 +265,6 @@
       tabTrashView.classList.remove('active');
       activeViewContainer.style.display = 'block';
       trashViewContainer.style.display = 'none';
-      currentView = 'active';
       loadLists();
     });
 
@@ -237,7 +273,6 @@
       tabActiveView.classList.remove('active');
       activeViewContainer.style.display = 'none';
       trashViewContainer.style.display = 'block';
-      currentView = 'trash';
       loadTrash();
     });
   }
@@ -284,8 +319,7 @@
         updateSessionUI();
       } else if (res.ok && mode === 'register') {
         showToast('Cuenta creada con éxito. Ahora podés iniciar sesión.', 'success');
-        const loginTab = document.getElementById('tab-login');
-        if (loginTab) loginTab.click();
+        setAuthTabMode('login');
       } else {
         showToast(data.message || 'Error de autenticación', 'error');
       }
@@ -293,9 +327,9 @@
       showToast('Error de red al conectar con el servidor', 'error');
     } finally {
       setButtonLoading(btnAuthSubmit, false);
+      setAuthTabMode(mode);
     }
   });
-
 
   // Google Login via gRPC (Google Identity Services OAuth2 + gRPC Backend)
   const googleGsiButtonContainer = document.getElementById('googleGsiButtonContainer');
@@ -450,7 +484,7 @@
         listTitleInput.value = '';
         participantsCountInput.value = '1';
         generateKey();
-        loadLists();
+        await Promise.all([loadLists(), loadTrash()]);
       } else {
         showToast(data.message || 'No se pudo crear la lista', 'error');
       }
@@ -524,7 +558,7 @@
       const payload = JSON.parse(ev.data);
       sseResults[listId] = payload;
       appendLog('SSE', `/api/lists/${listId}/events`, 200, payload, 'sse');
-      showToast(`Worker Thread #${payload.processedInThread} finalizó el cierre de la lista.`, 'success');
+      showToast(`Worker Thread #${payload.processedInThread} finalizó el reparto de la lista.`, 'success');
       source.close();
       activeSseConnections.delete(listId);
       loadLists();
@@ -553,7 +587,7 @@
     if (res.ok) {
       showToast('Lista actualizada correctamente.', 'success');
       closeModal();
-      loadLists();
+      await loadLists();
     } else {
       showToast(data.message || 'Error al actualizar la lista', 'error');
     }
@@ -602,7 +636,7 @@
     if (res.ok) {
       showToast('Ítem actualizado y totales recalculados.', 'success');
       closeModal();
-      loadLists();
+      await loadLists();
     } else {
       showToast(data.message || 'Error al actualizar el ítem', 'error');
     }
@@ -614,19 +648,30 @@
     const foundItem = foundList.items.find((it) => it.id === itemId);
     if (!foundItem) return;
 
+    const currentUnit = foundItem.unit || 'u.';
+    const unitOptionsHtml = AVAILABLE_UNITS.map(
+      (u) => `<option value="${u.value}" ${u.value === currentUnit ? 'selected' : ''}>${escapeHtml(u.label)}</option>`
+    ).join('');
+
     const bodyHtml = `
       <div>
         <label class="block text-xs font-medium text-slate-300 mb-1" for="modalItemName">Descripción del Ítem</label>
         <input id="modalItemName" type="text" value="${escapeHtml(foundItem.name)}" class="w-full bg-surface-900 text-slate-100 text-xs rounded-xl px-3 py-2 border border-surface-750" />
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1" for="modalItemPrice">Precio Unitario ($)</label>
-          <input id="modalItemPrice" type="number" min="0" step="0.01" value="${foundItem.price}" class="w-full bg-surface-900 text-slate-100 text-xs rounded-xl px-3 py-2 border border-surface-750 font-mono" />
-        </div>
+      <div class="grid grid-cols-3 gap-2.5">
         <div>
           <label class="block text-xs font-medium text-slate-300 mb-1" for="modalItemQty">Cantidad</label>
-          <input id="modalItemQty" type="number" min="1" value="${foundItem.quantity}" class="w-full bg-surface-900 text-slate-100 text-xs rounded-xl px-3 py-2 border border-surface-750 font-mono" />
+          <input id="modalItemQty" type="number" min="0.01" step="any" value="${foundItem.quantity}" class="w-full bg-surface-900 text-slate-100 text-xs rounded-xl px-3 py-2 border border-surface-750 font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1" for="modalItemUnit">Unidad</label>
+          <select id="modalItemUnit" class="w-full bg-surface-900 text-slate-100 text-xs rounded-xl px-2.5 py-2 border border-surface-750">
+            ${unitOptionsHtml}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1" for="modalItemPrice">Precio ($)</label>
+          <input id="modalItemPrice" type="number" min="0" step="0.01" value="${foundItem.price}" class="w-full bg-surface-900 text-slate-100 text-xs rounded-xl px-3 py-2 border border-surface-750 font-mono" />
         </div>
       </div>
     `;
@@ -634,17 +679,27 @@
     openModal('Editar Ítem y Recalcular Gasto', bodyHtml, async () => {
       const name = document.getElementById('modalItemName').value.trim();
       const price = parseFloat(document.getElementById('modalItemPrice').value) || 0;
-      const quantity = parseInt(document.getElementById('modalItemQty').value, 10) || 1;
+      const quantity = parseFloat(document.getElementById('modalItemQty').value);
+      const unit = document.getElementById('modalItemUnit').value || 'u.';
       if (!name) {
         showToast('El nombre del ítem es obligatorio.', 'warning');
         return;
       }
-      await updateItemInList(listId, itemId, { name, price, quantity });
+      if (!quantity || isNaN(quantity) || quantity <= 0) {
+        showToast('La cantidad debe ser mayor a 0 (ej: 1, 1.5, 0.5).', 'warning');
+        return;
+      }
+      await updateItemInList(listId, itemId, { name, price, quantity, unit });
     });
   };
 
-  // Máquina de estados
+  // Máquina de estados (Confirmar y Repartir / Eliminar)
   window.changeListStatus = async function (listId, targetStatus) {
+    if (targetStatus === 'ELIMINADA') {
+      await window.moveListToTrash(listId);
+      return;
+    }
+
     const endpoint = `/api/lists/${listId}/status`;
     const res = await fetch(endpoint, {
       method: 'PATCH',
@@ -658,17 +713,19 @@
     appendLog('PATCH', endpoint, res.status, data);
 
     if (res.ok) {
-      showToast(`Estado actualizado a ${targetStatus}.`, 'success');
       if (targetStatus === 'CONFIRMADA') {
+        showToast('¡Lista confirmada! El gasto por persona ya fue repartido.', 'success');
         subscribeSse(listId);
+      } else {
+        showToast(`Estado actualizado a ${targetStatus}.`, 'success');
       }
-      loadLists();
+      await Promise.all([loadLists(), loadTrash()]);
     } else {
       showToast(data.message || 'Transición de estado inválida', 'error');
     }
   };
 
-  // Mover a papelera (Soft Delete)
+  // Eliminar lista (se marca ELIMINADA y va directo a la papelera)
   window.moveListToTrash = async function (listId) {
     const endpoint = `/api/lists/${listId}`;
     const res = await fetch(endpoint, {
@@ -685,11 +742,30 @@
         activeSseConnections.get(listId).close();
         activeSseConnections.delete(listId);
       }
-      showToast('Lista enviada a la papelera de reciclaje (30 días).', 'warning');
-      loadLists();
-      loadTrash();
+      showToast('Lista eliminada y movida a la papelera de reciclaje.', 'warning');
+      await Promise.all([loadLists(), loadTrash()]);
     } else {
-      showToast(data.message || 'No se pudo enviar a la papelera', 'error');
+      showToast(data.message || 'No se pudo eliminar la lista', 'error');
+    }
+  };
+
+  // Eliminar definitivamente una lista individual desde la papelera
+  window.deletePermanentlyFromTrash = async function (listId) {
+    const endpoint = `/api/lists/${listId}?permanent=true`;
+    const res = await fetch(endpoint, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const data = await res.json();
+    appendLog('DELETE', endpoint, res.status, data);
+
+    if (res.ok) {
+      showToast('Lista eliminada definitivamente del sistema.', 'info');
+      await Promise.all([loadTrash(), loadLists()]);
+    } else {
+      showToast(data.message || 'No se pudo eliminar definitivamente la lista', 'error');
     }
   };
 
@@ -707,19 +783,18 @@
 
     if (res.ok) {
       showToast('Lista restaurada exitosamente a tus listas activas.', 'success');
-      loadTrash();
-      loadLists();
+      await Promise.all([loadTrash(), loadLists()]);
     } else {
       showToast(data.message || 'No se pudo restaurar la lista', 'error');
     }
   };
 
-  // Purgar papelera (+30 días)
+  // Limpiar / Vaciar papelera de inmediato (elimina definitivamente todas las listas en papelera)
   if (btnPurgeTrash) {
     btnPurgeTrash.addEventListener('click', async () => {
-      setButtonLoading(btnPurgeTrash, true, 'Purgando...');
+      setButtonLoading(btnPurgeTrash, true, 'Limpiando...');
       try {
-        const endpoint = '/api/lists/trash/purge?days=30';
+        const endpoint = '/api/lists/trash/purge?days=0';
         const res = await fetch(endpoint, {
           method: 'DELETE',
           headers: {
@@ -730,10 +805,15 @@
         appendLog('DELETE', endpoint, res.status, data);
 
         if (res.ok) {
-          showToast(`Purga completada: ${data.purgedCount || 0} listas expiradas eliminadas.`, 'info');
-          loadTrash();
+          const count = data.purgedCount || 0;
+          if (count > 0) {
+            showToast(`Papelera vaciada: ${count} lista(s) eliminada(s) definitivamente.`, 'success');
+          } else {
+            showToast('La papelera ya está vacía.', 'info');
+          }
+          await Promise.all([loadTrash(), loadLists()]);
         } else {
-          showToast(data.message || 'Error al purgar papelera', 'error');
+          showToast(data.message || 'Error al limpiar la papelera', 'error');
         }
       } finally {
         setButtonLoading(btnPurgeTrash, false);
@@ -741,21 +821,29 @@
     });
   }
 
-  // Agregar ítem a una lista
+  // Agregar ítem a una lista (con soporte de decimales y unidades: u., kg, g, L, ml, etc.)
   window.addItemToList = async function (listId) {
     const nameInput = document.getElementById(`itemName_${listId}`);
     const priceInput = document.getElementById(`itemPrice_${listId}`);
     const qtyInput = document.getElementById(`itemQty_${listId}`);
+    const unitSelect = document.getElementById(`itemUnit_${listId}`);
 
     if (!nameInput || !priceInput || !qtyInput) return;
 
     const name = nameInput.value.trim();
     const price = parseFloat(priceInput.value) || 0;
-    const quantity = parseInt(qtyInput.value, 10) || 1;
+    const quantity = parseFloat(qtyInput.value);
+    const unit = unitSelect ? unitSelect.value : 'u.';
 
     if (!name) {
       showToast('Por favor ingresá una descripción para el ítem.', 'warning');
       nameInput.focus();
+      return;
+    }
+
+    if (!quantity || isNaN(quantity) || quantity <= 0) {
+      showToast('Ingresá una cantidad válida mayor a 0 (ej: 1, 1.5, 0.5).', 'warning');
+      qtyInput.focus();
       return;
     }
 
@@ -766,7 +854,7 @@
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ name, price, quantity }),
+      body: JSON.stringify({ name, price, quantity, unit }),
     });
     const data = await res.json();
     appendLog('POST', endpoint, res.status, data);
@@ -775,8 +863,9 @@
       nameInput.value = '';
       priceInput.value = '';
       qtyInput.value = '1';
-      showToast(`Ítem "${name}" agregado al reparto.`, 'success');
-      loadLists();
+      if (unitSelect) unitSelect.value = 'u.';
+      showToast(`Ítem "${name}" (${formatQuantity(quantity, unit)}) agregado a la lista.`, 'success');
+      await loadLists();
     } else {
       showToast(data.message || 'Error al agregar ítem', 'error');
     }
@@ -796,7 +885,7 @@
 
     if (res.ok) {
       showToast('Ítem eliminado de la lista.', 'info');
-      loadLists();
+      await loadLists();
     } else {
       showToast(data.message || 'Error al eliminar ítem', 'error');
     }
@@ -808,8 +897,13 @@
       return;
     }
 
+    const unitOptionsHtml = AVAILABLE_UNITS.map(
+      (u) => `<option value="${u.value}">${escapeHtml(u.label)}</option>`
+    ).join('');
+
     listsContainer.innerHTML = lists
       .map((item) => {
+        const isConfirmed = item.status === 'CONFIRMADA';
         const sseInfo = sseResults[item.id]
           ? `<div class="sse-banner">⚡ Worker Thread #${sseResults[item.id].processedInThread}: ${sseResults[item.id].summary} (Hash: ${sseResults[item.id].checksum})</div>`
           : '';
@@ -817,22 +911,37 @@
         const items = item.items || [];
         const itemsRows = items.length
           ? items
-              .map(
-                (it) => `
+              .map((it) => {
+                const unit = it.unit || 'u.';
+                const refUnit = getPriceReferenceLabel(unit);
+                return `
             <tr class="item-row">
               <td>${escapeHtml(it.name)}</td>
-              <td>$${Number(it.price).toFixed(2)}</td>
-              <td>x${it.quantity}</td>
+              <td>$${Number(it.price).toFixed(2)} <span class="text-[10px] text-slate-500">/${escapeHtml(refUnit)}</span></td>
+              <td>${escapeHtml(formatQuantity(it.quantity, unit))}</td>
               <td><strong>$${Number(it.subtotal).toFixed(2)}</strong></td>
               <td style="text-align: right;" class="space-x-1">
                 <button class="btn btn-xs btn-secondary" onclick="openEditItemModal('${item.id}', '${it.id}')" title="Editar ítem">✎</button>
                 <button class="btn btn-xs btn-danger" onclick="deleteItem('${item.id}', '${it.id}')" title="Eliminar ítem">✖</button>
               </td>
             </tr>
-          `
-              )
+          `;
+              })
               .join('')
           : '<tr><td colspan="5" class="empty-items">No hay ítems cargados en esta lista todavía.</td></tr>';
+
+        const perPersonHtml = isConfirmed
+          ? `<span class="expense-per-person">$${Number(item.amountPerPerson || 0).toFixed(2)}</span>`
+          : `<span class="text-xs font-mono text-amber-400 font-semibold" title="Confirmá la lista para calcular el reparto por persona">Pendiente (Confirmar para repartir)</span>`;
+
+        const statusActionBtn = isConfirmed
+          ? `<span class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+               <i class="fa-solid fa-check-double"></i>
+               <span>Repartida ($${Number(item.amountPerPerson || 0).toFixed(2)} c/u)</span>
+             </span>`
+          : `<button class="btn btn-sm btn-success" onclick="changeListStatus('${item.id}', 'CONFIRMADA')">
+               ➔ Confirmar y Repartir
+             </button>`;
 
         return `
         <div class="list-item">
@@ -864,7 +973,7 @@
             <div class="expense-divider"></div>
             <div class="expense-col highlight">
               <span class="expense-label">Gasto por Persona</span>
-              <span class="expense-per-person">$${Number(item.amountPerPerson || 0).toFixed(2)}</span>
+              ${perPersonHtml}
             </div>
           </div>
 
@@ -875,7 +984,7 @@
                 <tr>
                   <th>Ítem</th>
                   <th>Precio</th>
-                  <th>Cant.</th>
+                  <th>Cant. / Unidad</th>
                   <th>Subtotal</th>
                   <th></th>
                 </tr>
@@ -885,27 +994,25 @@
               </tbody>
             </table>
 
-            <!-- Formulario Rápido de Nuevo Ítem -->
-            <div class="add-item-bar flex items-center gap-2 pt-2">
-              <input type="text" id="itemName_${item.id}" placeholder="Nuevo ítem (ej: Bebidas)" class="input-sm flex-1 bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs" style="background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;" autocomplete="off" />
-              <input type="number" id="itemPrice_${item.id}" placeholder="Precio $" min="0" step="0.01" class="input-sm bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs font-mono text-right" style="width: 95px; background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;" autocomplete="off" />
-              <input type="number" id="itemQty_${item.id}" placeholder="Cant." min="1" value="1" class="input-sm bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs font-mono text-center" style="width: 65px; background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;" autocomplete="off" />
+            <!-- Formulario Rápido de Nuevo Ítem con Cantidad Variable y Unidad -->
+            <div class="add-item-bar flex flex-wrap items-center gap-2 pt-2">
+              <input type="text" id="itemName_${item.id}" placeholder="Nuevo ítem (ej: Costilla, Bebidas)" class="input-sm flex-1 min-w-[140px] bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs" style="background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;" autocomplete="off" />
+              <input type="number" id="itemQty_${item.id}" placeholder="Cant. (ej: 1.5)" min="0.01" step="any" value="1" title="Cantidad (admite decimales como 1.5)" class="input-sm bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs font-mono text-center" style="width: 78px; background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;" autocomplete="off" />
+              <select id="itemUnit_${item.id}" onchange="updatePricePlaceholder('${item.id}')" title="Unidad de medida" class="input-sm bg-surface-900 text-slate-100 border border-surface-750 focus:border-brand-500 rounded-lg text-xs" style="width: 112px; background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;">
+                ${unitOptionsHtml}
+              </select>
+              <input type="number" id="itemPrice_${item.id}" placeholder="Precio x u. $" min="0" step="0.01" class="input-sm bg-surface-900 text-slate-100 placeholder-slate-500 border border-surface-750 focus:border-brand-500 rounded-lg text-xs font-mono text-right" style="width: 110px; background-color: #0f172a !important; color: #f1f5f9 !important; border-color: #27354d !important;" autocomplete="off" />
               <button class="btn btn-sm btn-primary px-3 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5" onclick="addItemToList('${item.id}')">➕ Agregar</button>
             </div>
           </div>
 
           ${sseInfo}
 
-          <!-- Acciones de Estado y Papelera -->
-          <div class="actions-row">
-            <button class="btn btn-sm btn-success" onclick="changeListStatus('${item.id}', 'CONFIRMADA')">
-              ➔ CONFIRMADA
-            </button>
-            <button class="btn btn-sm btn-danger" onclick="changeListStatus('${item.id}', 'ELIMINADA')">
-              ➔ ELIMINADA
-            </button>
-            <button class="btn btn-sm btn-warning" onclick="moveListToTrash('${item.id}')">
-              🗑️ Enviar a Papelera
+          <!-- Acciones de Estado y Eliminación (al eliminar pasa directo a la Papelera) -->
+          <div class="actions-row justify-between">
+            ${statusActionBtn}
+            <button class="btn btn-sm btn-danger" onclick="moveListToTrash('${item.id}')">
+              🗑️ Eliminar Lista
             </button>
           </div>
         </div>
@@ -926,11 +1033,11 @@
         <div class="list-item trash-item">
           <div class="list-item-header">
             <span class="list-title">${escapeHtml(item.title)}</span>
-            <span class="badge badge-warning">En Papelera (${item.daysRemaining} días restantes)</span>
+            <span class="badge badge-ELIMINADA">ELIMINADA (${item.daysRemaining} días para borrado automático)</span>
           </div>
           <div class="list-meta">
             <span>ID: <code>${item.id}</code></span>
-            <span>Enviada a papelera: ${new Date(item.deletedAt).toLocaleString()}</span>
+            <span>Eliminada: ${new Date(item.deletedAt).toLocaleString()}</span>
           </div>
 
           <div class="expense-box">
@@ -950,9 +1057,12 @@
             </div>
           </div>
 
-          <div class="actions-row">
+          <div class="actions-row justify-between">
             <button class="btn btn-sm btn-success" onclick="restoreFromTrash('${item.id}')">
               ♻️ Restaurar Lista
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="deletePermanentlyFromTrash('${item.id}')">
+              🗑️ Eliminar Definitivamente
             </button>
           </div>
         </div>
@@ -962,8 +1072,6 @@
   }
 
   btnGenKey.addEventListener('click', generateKey);
-  btnRefreshLists.addEventListener('click', loadLists);
-  if (btnRefreshTrash) btnRefreshTrash.addEventListener('click', loadTrash);
   btnClearLog.addEventListener('click', () => {
     httpLog.innerHTML = '';
   });

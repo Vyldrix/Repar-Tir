@@ -64,7 +64,7 @@
       transition: background-color 9999999s ease-in-out 0s !important;
     }
   </style>
-  <link rel="stylesheet" href="/app/styles.css?v=2.5.0" />
+  <link rel="stylesheet" href="/app/styles.css?v=2.7.0" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-surface-950 text-slate-200 font-sans min-h-screen antialiased flex flex-col selection:bg-brand-500 selection:text-white">
@@ -109,7 +109,7 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-lg font-bold tracking-tight text-white">Repar-Tir</h1>
-            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">v2.5-SaaS</span>
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">v2.7-SaaS</span>
           </div>
           <p class="text-xs font-normal hidden sm:block text-slate-300">Gestión de Gastos, Reparto, Papelera, Estados e Idempotencia</p>
         </div>
@@ -151,10 +151,10 @@
           </div>
           <!-- Tab Selector: Login vs Register -->
           <div class="tabs grid grid-cols-2 gap-1.5 bg-surface-900 p-1 rounded-xl mb-4 text-xs font-medium border border-surface-800">
-            <button class="tab active py-2 text-center rounded-lg bg-brand-600 text-white shadow-sm transition" data-tab="login" id="tab-login" type="button">
+            <button class="tab active py-2 text-center rounded-lg transition" data-tab="login" id="tab-login" type="button">
               <i class="fa-solid fa-right-to-bracket mr-1.5"></i>Iniciar Sesión
             </button>
-            <button class="tab py-2 text-center rounded-lg text-slate-400 hover:text-white transition" data-tab="register" id="tab-register" type="button">
+            <button class="tab py-2 text-center rounded-lg transition" data-tab="register" id="tab-register" type="button">
               <i class="fa-solid fa-user-plus mr-1.5"></i>Registrarse
             </button>
           </div>
@@ -265,7 +265,7 @@
             <!-- Action Button: POST Request -->
             <button class="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-emerald-100 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] transition shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2" id="btnCreateListSubmit" type="submit">
               <span class="bg-emerald-800 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded font-bold">POST</span>
-              <span>Enviar POST /api/lists</span>
+              <span>Crear Lista</span>
             </button>
           </form>
         </section>
@@ -278,24 +278,20 @@
       <div class="lg:col-span-7 flex flex-col gap-6 right-panel">
         <!-- BEGIN: ListsDashboardCard -->
         <section class="glass-panel rounded-2xl p-5 shadow-xl border border-surface-800 flex flex-col card" data-purpose="lists-dashboard">
-          <!-- Top Tabs & Sync Button -->
+          <!-- Top View Tabs -->
           <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-surface-800">
             <div class="tabs view-tabs flex items-center space-x-2 bg-surface-900 p-1 rounded-xl border border-surface-800">
-              <button class="tab active px-3.5 py-1.5 rounded-lg text-xs font-medium bg-brand-600 text-white shadow-sm flex items-center gap-2 transition" id="tabActiveView" data-view="active" type="button">
+              <button class="tab active px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition" id="tabActiveView" data-view="active" type="button">
                 <i class="fa-solid fa-folder-open text-[11px]"></i>
                 <span>Listas Activas</span>
                 <span class="bg-surface-800 text-sky-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono" id="activeBadgeCount">0</span>
               </button>
-              <button class="tab px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white flex items-center gap-2 transition" id="tabTrashView" data-view="trash" type="button">
+              <button class="tab px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition" id="tabTrashView" data-view="trash" type="button">
                 <i class="fa-regular fa-trash-can text-[11px]"></i>
                 <span>Papelera de Reciclaje</span>
                 <span class="bg-surface-800 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono" id="trashBadgeCount">0</span>
               </button>
             </div>
-            <button class="px-3 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-750 text-slate-200 text-xs font-medium flex items-center gap-2 transition" id="btnRefreshLists" type="button">
-              <i class="fa-solid fa-rotate text-sky-400"></i>
-              <span>Actualizar Listas</span>
-            </button>
           </div>
 
           <!-- Section Subtitle & State Workflow Pipeline -->
@@ -318,7 +314,7 @@
           <div id="activeViewContainer">
             <div class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <p class="text-xs leading-relaxed text-slate-300 flex-1">
-                Flujo válido: <span class="text-slate-300 font-mono text-[11px]">BORRADOR → CONFIRMADA → ELIMINADA</span>. Agregá o editá ítems y calculá el reparto equitativo en tiempo real.
+                Cargá ítems por unidad, kilos, gramos o litros. Al <strong>confirmar y repartir</strong> la lista se calcula el gasto por persona.
               </p>
               <div class="relative w-full sm:w-56">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs">
@@ -334,26 +330,22 @@
             </div>
           </div>
 
-          <!-- Vista 2: Papelera de Reciclaje (Soft Delete con retención de 30 Días) -->
+          <!-- Vista 2: Papelera de Reciclaje -->
           <div id="trashViewContainer" style="display: none;">
             <div class="py-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-surface-800/60">
               <div class="flex items-center gap-2">
                 <span class="text-base">🗑️</span>
-                <h2 class="text-sm font-semibold text-slate-100">Papelera de Reciclaje (Retención 30 Días)</h2>
+                <h2 class="text-sm font-semibold text-slate-100">Papelera de Reciclaje</h2>
               </div>
               <div class="flex items-center gap-2">
-                <button class="px-3 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-750 text-slate-200 text-xs font-medium flex items-center gap-2 transition" id="btnRefreshTrash" type="button">
-                  <i class="fa-solid fa-rotate text-sky-400"></i>
-                  <span>Actualizar Papelera</span>
-                </button>
-                <button class="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-medium flex items-center gap-2 transition" id="btnPurgeTrash" title="Eliminar definitivamente listas con más de 30 días" type="button">
+                <button class="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-medium flex items-center gap-2 transition" id="btnPurgeTrash" title="Vaciar todas las listas de la papelera de forma definitiva" type="button">
                   <i class="fa-solid fa-broom text-rose-400"></i>
-                  <span>Purgar Expiradas (+30 Días)</span>
+                  <span>Limpiar Papelera</span>
                 </button>
               </div>
             </div>
             <p class="text-xs py-3 leading-relaxed text-slate-300">
-              Las listas eliminadas permanecen <span class="font-semibold text-amber-400">30 Días</span> en la papelera antes de ser depuradas permanentemente del sistema. Podés restaurarlas a su estado activo en cualquier momento.
+              Las listas en la papelera se eliminan automáticamente después de <span class="font-semibold text-amber-400">30 Días</span>. Si querés vaciar tu papelera antes, tocá el botón <strong>Limpiar Papelera</strong> para eliminarlas definitivamente (una vez eliminadas no podrán restaurarse).
             </p>
             <div id="trashContainer" class="lists-grid space-y-3.5 my-2">
               <div class="empty-state border border-surface-750 rounded-xl p-4 text-center bg-surface-900">
@@ -417,6 +409,6 @@
   </footer>
   <!-- END: MainFooter -->
 
-  <script src="/app/app.js?v=2.5.0"></script>
+  <script src="/app/app.js?v=2.7.0"></script>
 </body>
 </html>
