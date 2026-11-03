@@ -65,6 +65,7 @@
     }
   </style>
   <link rel="stylesheet" href="/app/styles.css?v=2.5.0" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-surface-950 text-slate-200 font-sans min-h-screen antialiased flex flex-col selection:bg-brand-500 selection:text-white">
   <!-- BEGIN: ToastNotificationContainer -->
@@ -196,6 +197,17 @@
               <span>Iniciar Sesión</span>
             </button>
           </form>
+          <div class="relative my-4 flex items-center justify-center">
+            <div class="border-t border-surface-800 w-full"></div>
+            <span class="bg-surface-900/90 px-3 py-0.5 rounded-full border border-surface-800 text-[10px] uppercase tracking-wider text-slate-400 font-semibold whitespace-nowrap flex items-center gap-1.5">
+              <i class="fa-solid fa-bolt text-sky-400 text-[9px]"></i>
+              <span>OAuth 2.0 • gRPC</span>
+            </span>
+            <div class="border-t border-surface-800 w-full"></div>
+          </div>
+          <div class="google-auth-box">
+            <div id="googleGsiButtonContainer" class="google-gsi-container" style="color-scheme: light;"></div>
+          </div>
         </section>
         <!-- END: AuthenticationCard -->
 

@@ -107,6 +107,62 @@ export class UserModel {
     };
   }
 
+  static async findOrCreateByGoogle(data: {
+    googleId: string;
+    email: string;
+    name?: string;
+  }): Promise<User> {
+    let existing = await prisma.user.findFirst({
+      where: {
+        OR: [{ googleId: data.googleId }, { email: data.email }],
+      },
+    });
+
+    if (existing) {
+      if (!existing.googleId) {
+        existing = await prisma.user.update({
+          where: { id: existing.id },
+          data: { googleId: data.googleId },
+        });
+      }
+      return {
+        id: existing.id,
+        username: existing.username,
+        email: existing.email,
+        passwordHash: existing.passwordHash,
+        createdAt: existing.createdAt.toISOString(),
+      };
+    }
+
+    const baseName = (data.name || data.email.split('@')[0] || 'usuario')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    let candidateUsername = baseName || 'usuariogoogle';
+    const collision = await prisma.user.findFirst({
+      where: { username: candidateUsername },
+    });
+    if (collision) {
+      candidateUsername = `${candidateUsername}_${crypto.randomInt(1000, 9999)}`;
+    }
+
+    const created = await prisma.user.create({
+      data: {
+        username: candidateUsername,
+        email: data.email,
+        googleId: data.googleId,
+        passwordHash: '',
+      },
+    });
+
+    return {
+      id: created.id,
+      username: created.username,
+      email: created.email,
+      passwordHash: created.passwordHash,
+      createdAt: created.createdAt.toISOString(),
+    };
+  }
+
   static toResponse(user: User): UserResponse {
     // Garantizar que la contraseña o su hash nunca se incluyan en la respuesta del usuario
     const { passwordHash: _passwordHash, ...userResponse } = user;
@@ -115,6 +171,7 @@ export class UserModel {
 
   static async verifyPassword(plainPassword: string, storedHash: string): Promise<boolean> {
     try {
+      if (!storedHash) return false;
       if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
         return await bcrypt.compare(plainPassword, storedHash);
       }
