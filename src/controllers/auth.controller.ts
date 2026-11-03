@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import * as grpc from '@grpc/grpc-js';
 import { UserModel } from '../models/user.model.js';
 import {
   signJWT,
@@ -6,6 +7,7 @@ import {
   verifyRefreshToken,
   RefreshTokenStore,
 } from '../middlewares/auth.middleware.js';
+import { authenticateWithGoogleViaGrpc } from '../grpc/auth.grpc.js';
 
 export class AuthController {
   static async register(req: Request, res: Response): Promise<void> {
@@ -127,6 +129,56 @@ export class AuthController {
     });
   }
 
+  static async googleConfig(_req: Request, res: Response): Promise<void> {
+    res.status(200).json({
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      grpcEnabled: true,
+    });
+  }
+
+  static async googleLogin(req: Request, res: Response): Promise<void> {
+    const idToken = req.body?.idToken || req.body?.credential || req.body?.id_token;
+
+    if (!idToken || typeof idToken !== 'string' || idToken.trim() === '') {
+      res.status(400).json({
+        message: 'El token de Google (idToken o credential) es obligatorio',
+      });
+      return;
+    }
+
+    try {
+      const grpcResponse = await authenticateWithGoogleViaGrpc(idToken.trim());
+
+      res.status(200).json({
+        message: grpcResponse.message,
+        user: {
+          id: grpcResponse.user.id,
+          username: grpcResponse.user.username,
+          email: grpcResponse.user.email,
+          createdAt: grpcResponse.user.created_at,
+        },
+        token: grpcResponse.token,
+        accessToken: grpcResponse.access_token,
+        refreshToken: grpcResponse.refresh_token,
+      });
+    } catch (err: unknown) {
+      const grpcErr = err as { code?: number; details?: string };
+      if (grpcErr?.code === grpc.status.INVALID_ARGUMENT) {
+        res.status(400).json({ message: grpcErr.details || 'Argumento inválido para Google Login' });
+        return;
+      }
+      if (grpcErr?.code === grpc.status.UNAUTHENTICATED) {
+        res.status(401).json({
+          message: grpcErr.details || 'Token de Google inválido o no autorizado',
+        });
+        return;
+      }
+      res.status(500).json({
+        message: 'Error al procesar el inicio de sesión con Google vía gRPC',
+      });
+    }
+  }
+
   static async refresh(req: Request, res: Response): Promise<void> {
     const refreshToken = req.body?.refreshToken || req.body?.token;
 
@@ -213,4 +265,3 @@ export class AuthController {
     await AuthController.revoke(req, res);
   }
 }
-

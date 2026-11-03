@@ -296,6 +296,93 @@
     }
   });
 
+
+  // Google Login via gRPC (Google Identity Services OAuth2 + gRPC Backend)
+  const googleGsiButtonContainer = document.getElementById('googleGsiButtonContainer');
+  let activeGoogleClientId = localStorage.getItem('repartir_google_client_id') || '';
+
+  async function loginWithGoogleGrpc(idToken) {
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = await res.json();
+      appendLog('POST (gRPC)', '/api/auth/google', res.status, data);
+      if (res.ok) {
+        accessToken = data.accessToken || data.token;
+        refreshToken = data.refreshToken || '';
+        currentUser = data.user;
+        localStorage.setItem('repartir_access_token', accessToken);
+        localStorage.setItem('repartir_refresh_token', refreshToken);
+        localStorage.setItem('repartir_user', JSON.stringify(currentUser));
+        showToast(`¡Sesión iniciada con Google (gRPC) como ${currentUser.email}!`, 'success');
+        updateSessionUI();
+      } else {
+        showToast(data.message || 'Error al autenticar con Google vía gRPC', 'error');
+      }
+    } catch {
+      showToast('Error de red al conectar con el servicio gRPC', 'error');
+    }
+  }
+
+  function renderRealGoogleSignInButton(clientId) {
+    if (!clientId || !window.google || !window.google.accounts || !window.google.accounts.id) {
+      return false;
+    }
+    try {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          if (response && response.credential) {
+            loginWithGoogleGrpc(response.credential);
+          }
+        },
+      });
+      if (googleGsiButtonContainer) {
+        googleGsiButtonContainer.innerHTML = '';
+        const containerWidth = Math.min(Math.max((googleGsiButtonContainer.offsetWidth || 340) - 8, 240), 380);
+        window.google.accounts.id.renderButton(googleGsiButtonContainer, {
+          theme: 'filled_black',
+          size: 'large',
+          shape: 'pill',
+          text: 'continue_with',
+          logo_alignment: 'left',
+          width: containerWidth,
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function initGoogleGsiConfig() {
+    try {
+      const res = await fetch('/api/auth/google/config');
+      if (res.ok) {
+        const cfg = await res.json();
+        if (cfg.clientId) {
+          activeGoogleClientId = cfg.clientId;
+        }
+      }
+    } catch {
+      // Ignorar si aún no está disponible
+    }
+    if (activeGoogleClientId) {
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts += 1;
+        if (renderRealGoogleSignInButton(activeGoogleClientId) || attempts > 20) {
+          clearInterval(timer);
+        }
+      }, 250);
+    }
+  }
+
+  void initGoogleGsiConfig();
+
   // Logout
   btnLogout.addEventListener('click', async () => {
     setButtonLoading(btnLogout, true, 'Cerrando...');
