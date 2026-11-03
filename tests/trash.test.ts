@@ -93,6 +93,7 @@ describe('Papelera de Reciclaje (Soft Delete), Restauración y Purga tras 30 Dí
     expect(restoreRes.status).toBe(200);
     expect(restoreRes.body.id).toBe(listId);
     expect(restoreRes.body.deletedAt).toBeNull();
+    expect(restoreRes.body.status).toBe('BORRADOR');
 
     // Comprobar que vuelve a estar activa
     const searchRes = await request(app)
@@ -103,6 +104,33 @@ describe('Papelera de Reciclaje (Soft Delete), Restauración y Purga tras 30 Dí
     expect(searchRes.status).toBe(200);
     const restoredFound = searchRes.body.lists.find((l: { id: string }) => l.id === listId);
     expect(restoredFound).toBeDefined();
+  });
+
+  it('debe permitir limpiar la papelera antes de los 30 días (days=0) e impedir restaurar listas eliminadas definitivamente', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUser}`)
+      .send({ title: 'Lista para vaciar de la papelera' });
+
+    const listId = createRes.body.id;
+
+    await request(app)
+      .delete(`/api/lists/${listId}`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    const emptyRes = await request(app)
+      .delete('/api/lists/trash/purge?days=0')
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(emptyRes.status).toBe(200);
+    expect(emptyRes.body.purgedCount).toBeGreaterThanOrEqual(1);
+
+    // Ya no se puede restaurar porque fue eliminada definitivamente
+    const restoreAfterPurge = await request(app)
+      .post(`/api/lists/${listId}/restore`)
+      .set('Authorization', `Bearer ${tokenUser}`);
+
+    expect(restoreAfterPurge.status).toBe(404);
   });
 
   it('debe rechazar con HTTP 403 Forbidden si otro usuario intenta restaurar una lista ajena', async () => {

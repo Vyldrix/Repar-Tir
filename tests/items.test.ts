@@ -55,6 +55,50 @@ describe('Gestión de Ítems, Cantidad de Personas y Cálculo de Gastos (HU32 y 
     expect(res.body.amountPerPerson).toBe(5000);
   });
 
+  it('debe permitir cantidades decimales y unidades variables (kilos, gramos, litros, ej. 1.5 kg)', async () => {
+    const createRes = await request(app)
+      .post('/api/lists')
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        title: 'Asado con unidades variables',
+        participantsCount: 3,
+      });
+
+    const listId = createRes.body.id;
+
+    // 1.5 kg de Costilla a $15000/kg -> $22500
+    const resKg = await request(app)
+      .post(`/api/lists/${listId}/items`)
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        name: 'Costilla',
+        price: 15000,
+        quantity: 1.5,
+        unit: 'kg',
+      });
+
+    expect(resKg.status).toBe(201);
+    expect(resKg.body.items[0].quantity).toBe(1.5);
+    expect(resKg.body.items[0].unit).toBe('kg');
+    expect(resKg.body.items[0].subtotal).toBe(22500);
+
+    // 500 g de Queso a $9000/kg -> $4500
+    const resGramos = await request(app)
+      .post(`/api/lists/${listId}/items`)
+      .set('Authorization', `Bearer ${tokenUserA}`)
+      .send({
+        name: 'Queso',
+        price: 9000,
+        quantity: 500,
+        unit: 'g',
+      });
+
+    expect(resGramos.status).toBe(201);
+    // 22500 + 4500 = 27000; 27000 / 3 = 9000
+    expect(resGramos.body.totalAmount).toBe(27000);
+    expect(resGramos.body.amountPerPerson).toBe(9000);
+  });
+
   it('debe rechazar la creación si participantsCount es menor a 1 o no es un entero', async () => {
     const resNegative = await request(app)
       .post('/api/lists')

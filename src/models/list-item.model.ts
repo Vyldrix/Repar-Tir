@@ -1,5 +1,10 @@
 import prisma from '../lib/prisma.js';
-import { CreateListItemDto, UpdateListItemDto, ListItemResponseDto } from '../dtos/item.dto.js';
+import {
+  CreateListItemDto,
+  UpdateListItemDto,
+  ListItemResponseDto,
+  calculateItemSubtotal,
+} from '../dtos/item.dto.js';
 
 export class ListItemModel {
   private static mapToDto(record: {
@@ -7,16 +12,19 @@ export class ListItemModel {
     name: string;
     price: number;
     quantity: number;
+    unit?: string | null;
     listId: string;
     createdAt: Date;
     updatedAt: Date;
   }): ListItemResponseDto {
-    const subtotal = Number((record.price * record.quantity).toFixed(2));
+    const unit = record.unit || 'u.';
+    const subtotal = calculateItemSubtotal(record.price, record.quantity, unit);
     return {
       id: record.id,
       name: record.name,
       price: record.price,
       quantity: record.quantity,
+      unit,
       listId: record.listId,
       subtotal,
       createdAt: record.createdAt.toISOString(),
@@ -26,13 +34,15 @@ export class ListItemModel {
 
   static async create(listId: string, data: CreateListItemDto): Promise<ListItemResponseDto> {
     const price = data.price !== undefined ? Math.max(0, data.price) : 0;
-    const quantity = data.quantity !== undefined ? Math.max(1, data.quantity) : 1;
+    const quantity = data.quantity !== undefined ? Math.max(0.01, data.quantity) : 1;
+    const unit = data.unit ? data.unit.trim() : 'u.';
 
     const created = await prisma.listItem.create({
       data: {
         name: data.name.trim(),
         price,
         quantity,
+        unit,
         listId,
       },
     });
@@ -60,10 +70,11 @@ export class ListItemModel {
 
   static async update(id: string, data: UpdateListItemDto): Promise<ListItemResponseDto | undefined> {
     try {
-      const updateData: { name?: string; price?: number; quantity?: number } = {};
+      const updateData: { name?: string; price?: number; quantity?: number; unit?: string } = {};
       if (data.name !== undefined) updateData.name = data.name.trim();
       if (data.price !== undefined) updateData.price = Math.max(0, data.price);
-      if (data.quantity !== undefined) updateData.quantity = Math.max(1, data.quantity);
+      if (data.quantity !== undefined) updateData.quantity = Math.max(0.01, data.quantity);
+      if (data.unit !== undefined) updateData.unit = data.unit.trim() || 'u.';
 
       const updated = await prisma.listItem.update({
         where: { id },

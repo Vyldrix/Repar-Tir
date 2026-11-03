@@ -40,8 +40,10 @@ export class ListController {
   }
 
   static async purgeTrash(req: Request, res: Response): Promise<void> {
-    const days = req.query.days ? Number(req.query.days) : 30;
-    const result = await ListService.purgeExpiredTrash(days);
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id || authReq.user?.userId;
+    const days = req.query.days !== undefined ? Number(req.query.days) : 0;
+    const result = await ListService.purgeExpiredTrash(days, userId);
     res.status(result.status).json(result.data);
   }
 
@@ -129,9 +131,10 @@ export class ListController {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
     const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user?.id;
+    const userId = authReq.user?.id || authReq.user?.userId;
+    const permanent = req.query.permanent === 'true';
 
-    const result = await ListService.delete(id, userId);
+    const result = await ListService.delete(id, userId, permanent);
     res.status(result.status).json(result.data);
   }
 

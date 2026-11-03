@@ -118,11 +118,11 @@ export class ListService {
         }
         if (
           item.quantity !== undefined &&
-          (typeof item.quantity !== 'number' || !Number.isInteger(item.quantity) || item.quantity < 1)
+          (typeof item.quantity !== 'number' || isNaN(item.quantity) || item.quantity <= 0)
         ) {
           return {
             status: 400,
-            data: { message: 'La cantidad del ítem debe ser un número entero mayor o igual a 1' },
+            data: { message: 'La cantidad del ítem debe ser un número mayor a 0' },
           };
         }
       }
@@ -304,7 +304,7 @@ export class ListService {
   static async addItem(
     listId: string,
     userId: string | undefined,
-    itemData: { name?: unknown; price?: unknown; quantity?: unknown }
+    itemData: { name?: unknown; price?: unknown; quantity?: unknown; unit?: unknown }
   ): Promise<ServiceResult<List>> {
     const list = await ListModel.findById(listId);
     if (!list) {
@@ -321,7 +321,7 @@ export class ListService {
       };
     }
 
-    const { name, price, quantity } = itemData;
+    const { name, price, quantity, unit } = itemData;
 
     if (name === undefined || typeof name !== 'string' || name.trim() === '') {
       return {
@@ -350,19 +350,23 @@ export class ListService {
 
     let parsedQuantity = 1;
     if (quantity !== undefined) {
-      if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1) {
+      if (typeof quantity !== 'number' || isNaN(quantity) || quantity <= 0) {
         return {
           status: 400,
-          data: { message: 'La cantidad del ítem debe ser un número entero mayor o igual a 1' },
+          data: { message: 'La cantidad del ítem debe ser un número mayor a 0' },
         };
       }
-      parsedQuantity = quantity;
+      parsedQuantity = Number(quantity.toFixed(3));
     }
+
+    const parsedUnit =
+      typeof unit === 'string' && unit.trim() !== '' ? unit.trim() : 'u.';
 
     await ListItemModel.create(listId, {
       name: name.trim(),
       price: parsedPrice,
       quantity: parsedQuantity,
+      unit: parsedUnit,
     });
 
     const updatedList = await ListModel.findById(listId);
@@ -376,7 +380,7 @@ export class ListService {
     listId: string,
     itemId: string,
     userId: string | undefined,
-    itemData: { name?: unknown; price?: unknown; quantity?: unknown }
+    itemData: { name?: unknown; price?: unknown; quantity?: unknown; unit?: unknown }
   ): Promise<ServiceResult<List>> {
     const list = await ListModel.findById(listId);
     if (!list) {
@@ -401,8 +405,8 @@ export class ListService {
       };
     }
 
-    const { name, price, quantity } = itemData;
-    const updatePayload: { name?: string; price?: number; quantity?: number } = {};
+    const { name, price, quantity, unit } = itemData;
+    const updatePayload: { name?: string; price?: number; quantity?: number; unit?: string } = {};
 
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim() === '') {
@@ -431,13 +435,17 @@ export class ListService {
     }
 
     if (quantity !== undefined) {
-      if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1) {
+      if (typeof quantity !== 'number' || isNaN(quantity) || quantity <= 0) {
         return {
           status: 400,
-          data: { message: 'La cantidad del ítem debe ser un número entero mayor o igual a 1' },
+          data: { message: 'La cantidad del ítem debe ser un número mayor a 0' },
         };
       }
-      updatePayload.quantity = quantity;
+      updatePayload.quantity = Number(quantity.toFixed(3));
+    }
+
+    if (unit !== undefined && typeof unit === 'string' && unit.trim() !== '') {
+      updatePayload.unit = unit.trim();
     }
 
     await ListItemModel.update(itemId, updatePayload);
@@ -561,7 +569,7 @@ export class ListService {
       };
     }
 
-    // 5. Aplicar el cambio de estado
+    // 5. Aplicar el cambio de estado (si pasa a ELIMINADA, se envía automáticamente a la papelera)
     const updatedList = await ListModel.updateStatus(id, targetStatus);
     if (!updatedList) {
       return {
@@ -606,17 +614,19 @@ export class ListService {
     };
   }
 
-  static async delete(id: string, userId: string | undefined): Promise<ServiceResult<{ message: string }>> {
-    // 1. Validar si la lista existe
+  static async delete(
+    id: string,
+    userId: string | undefined,
+    permanent = false
+  ): Promise<ServiceResult<{ message: string }>> {
     const list = await ListModel.findById(id);
-    if (!list || list.deletedAt) {
+    if (!list) {
       return {
         status: 404,
         data: { message: 'Lista no encontrada' },
       };
     }
 
-    // 2. Validar que la lista pertenezca al usuario autenticado
     if (list.userId !== userId) {
       return {
         status: 403,
@@ -624,10 +634,23 @@ export class ListService {
       };
     }
 
-    // 3. Mover a la papelera (Soft delete)
+    if (permanent) {
+      await ListModel.delete(id);
+      return {
+        status: 200,
+        data: { message: 'Lista eliminada definitivamente del sistema' },
+      };
+    }
+
+    if (list.deletedAt) {
+      return {
+        status: 404,
+        data: { message: 'Lista no encontrada' },
+      };
+    }
+
     await ListModel.moveToTrash(id);
 
-    // 4. Responder con 200 OK
     return {
       status: 200,
       data: { message: 'Lista eliminada correctamente y enviada a la papelera' },
@@ -676,22 +699,36 @@ export class ListService {
   }
 
   static async purgeExpiredTrash(
-    retentionDays = 30
+    retentionDays = 30,
+    userId?: string
   ): Promise<ServiceResult<{ message: string; purgedCount: number }>> {
     const validDays =
-      typeof retentionDays === 'number' && retentionDays > 0 ? retentionDays : 30;
-    const purgedCount = await ListModel.purgeExpiredTrash(validDays);
+      typeof retentionDays === 'number' && !isNaN(retentionDays) && retentionDays >= 0
+        ? retentionDays
+        : 30;
+    const purgedCount = await ListModel.purgeExpiredTrash(
+      validDays === 0 ? 0 : validDays,
+      validDays === 0 ? userId : undefined
+    );
+
+    const message =
+      validDays === 0
+        ? `Papelera vaciada correctamente. Se eliminaron definitivamente ${purgedCount} lista(s)`
+        : `Purga completada. Se eliminaron definitivamente ${purgedCount} lista(s) con más de ${validDays} días en la papelera`;
 
     return {
       status: 200,
       data: {
-        message: `Purga completada. Se eliminaron definitivamente ${purgedCount} lista(s) con más de ${validDays} días en la papelera`,
+        message,
         purgedCount,
       },
     };
   }
 
   static async getTrash(userId: string): Promise<ServiceResult<TrashListSummary[]>> {
+    // Purga automática de listas que hayan superado los 30 días de retención
+    await ListModel.purgeExpiredTrash(30, userId);
+
     const lists = await ListModel.findTrashByUserId(userId);
     const now = Date.now();
     const MS_PER_DAY = 1000 * 60 * 60 * 24;

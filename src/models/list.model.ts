@@ -7,6 +7,7 @@ import {
   ListStatus,
   PaginatedListsResponseDto,
 } from '../dtos/list.dto.js';
+import { calculateItemSubtotal } from '../dtos/item.dto.js';
 
 export type List = ListResponseDto;
 
@@ -23,6 +24,7 @@ export class ListModel {
       name: string;
       price: number;
       quantity: number;
+      unit?: string | null;
       listId: string;
       createdAt: Date;
       updatedAt: Date;
@@ -39,13 +41,15 @@ export class ListModel {
 
     let totalAmount = 0;
     const mappedItems = record.items?.map((item) => {
-      const subtotal = Number((item.price * item.quantity).toFixed(2));
+      const unit = item.unit || 'u.';
+      const subtotal = calculateItemSubtotal(item.price, item.quantity, unit);
       totalAmount += subtotal;
       return {
         id: item.id,
         name: item.name,
         price: item.price,
         quantity: item.quantity,
+        unit,
         listId: item.listId,
         subtotal,
         createdAt: item.createdAt.toISOString(),
@@ -85,7 +89,8 @@ export class ListModel {
             create: data.items.map((i) => ({
               name: i.name.trim(),
               price: i.price !== undefined ? Math.max(0, i.price) : 0,
-              quantity: i.quantity !== undefined ? Math.max(1, i.quantity) : 1,
+              quantity: i.quantity !== undefined ? Math.max(0.01, i.quantity) : 1,
+              unit: i.unit ? i.unit.trim() : 'u.',
             })),
           }
         : undefined;
@@ -175,11 +180,14 @@ export class ListModel {
 
   static async updateStatus(id: string, status: ListStatus): Promise<List | undefined> {
     try {
+      const data: { status: ListStatus; deletedAt?: Date } = { status };
+      if (status === 'ELIMINADA') {
+        data.deletedAt = new Date();
+      }
+
       const updated = await prisma.list.update({
         where: { id },
-        data: {
-          status,
-        },
+        data,
         include: {
           items: true,
         },
@@ -196,6 +204,7 @@ export class ListModel {
       const updated = await prisma.list.update({
         where: { id },
         data: {
+          status: 'ELIMINADA',
           deletedAt: new Date(),
         },
         include: {
@@ -211,10 +220,14 @@ export class ListModel {
 
   static async restore(id: string): Promise<List | undefined> {
     try {
+      const current = await prisma.list.findUnique({ where: { id } });
+      if (!current) return undefined;
+
       const updated = await prisma.list.update({
         where: { id },
         data: {
           deletedAt: null,
+          status: current.status === 'ELIMINADA' ? 'BORRADOR' : current.status,
         },
         include: {
           items: true,
@@ -242,14 +255,32 @@ export class ListModel {
     return lists.map((l) => this.mapToDto(l));
   }
 
-  static async purgeExpiredTrash(retentionDays = 30): Promise<number> {
+  static async purgeExpiredTrash(retentionDays = 30, userId?: string): Promise<number> {
+    if (retentionDays <= 0) {
+      const whereClause: { deletedAt: { not: null }; userId?: string } = {
+        deletedAt: { not: null },
+      };
+      if (userId) {
+        whereClause.userId = userId;
+      }
+      const result = await prisma.list.deleteMany({
+        where: whereClause,
+      });
+      return result.count;
+    }
+
     const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-    const result = await prisma.list.deleteMany({
-      where: {
-        deletedAt: {
-          lte: cutoffDate,
-        },
+    const whereClause: { deletedAt: { lte: Date }; userId?: string } = {
+      deletedAt: {
+        lte: cutoffDate,
       },
+    };
+    if (userId) {
+      whereClause.userId = userId;
+    }
+
+    const result = await prisma.list.deleteMany({
+      where: whereClause,
     });
 
     return result.count;
